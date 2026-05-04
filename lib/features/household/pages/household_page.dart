@@ -120,7 +120,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
                                 housemate: housemates[index],
                               );
                             },
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(width: 18),
                           ),
                         ),
@@ -333,7 +333,7 @@ class ProfileAvatar extends StatelessWidget {
           ? Image.asset(
               imagePath!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _defaultIcon(),
+              errorBuilder: (_, _, _) => _defaultIcon(),
             )
           : _defaultIcon(),
     );

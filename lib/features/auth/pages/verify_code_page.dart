@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../app/router.dart';
 import '../../../core/constants/app_assets.dart';
-import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/primary_button.dart';
+import '../../../core/services/auth_service.dart';
 
 class VerifyCodePage extends StatefulWidget {
   const VerifyCodePage({super.key});
@@ -12,21 +13,71 @@ class VerifyCodePage extends StatefulWidget {
 }
 
 class _VerifyCodePageState extends State<VerifyCodePage> {
-  final codeController = TextEditingController();
+  final _auth = AuthService();
+  bool loading = false;
+  bool showError = false;
+  Timer? _pollingTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      final verified = await _auth.checkEmailVerified();
+      if (verified && mounted) {
+        _pollingTimer?.cancel();
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRouter.shell,
+          (route) => false,
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
-    codeController.dispose();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
-  void _verify() {
-    FocusScope.of(context).unfocus();
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRouter.shell,
-      (route) => false,
-    );
+  Future<void> _resend() async {
+    setState(() => loading = true);
+    await _auth.sendVerificationEmail();
+    if (mounted) {
+      setState(() => loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Verification email resent.')),
+      );
+    }
+  }
+
+  Future<void> _checkManually() async {
+    setState(() {
+      loading = true;
+      showError = false;
+    });
+
+    final verified = await _auth.checkEmailVerified();
+
+    if (!mounted) return;
+
+    if (verified) {
+      _pollingTimer?.cancel();
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.shell,
+        (route) => false,
+      );
+    } else {
+      setState(() {
+        loading = false;
+        showError = true;
+      });
+    }
   }
 
   @override
@@ -56,7 +107,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
                     const SizedBox(height: 56),
 
                     const Text(
-                      'Enter Code',
+                      'Verify your email',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 28,
@@ -67,18 +118,34 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
                     const SizedBox(height: 20),
 
                     const Text(
-                      'Please enter the 6 digit code we sent to your email address.',
+                      'We sent a verification link to your email. Click it and this screen will update automatically.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 18, height: 1.4),
                     ),
 
                     const SizedBox(height: 28),
 
-                    AppTextField(controller: codeController, hint: 'Code'),
+                    if (showError)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          'Email not verified yet. Please check your inbox.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.red, fontSize: 15),
+                        ),
+                      ),
 
-                    const SizedBox(height: 24),
+                    PrimaryButton(
+                      label: loading ? 'Checking...' : "I've verified my email",
+                      onPressed: loading ? null : _checkManually,
+                    ),
 
-                    PrimaryButton(label: 'Verify', onPressed: _verify),
+                    const SizedBox(height: 12),
+
+                    TextButton(
+                      onPressed: loading ? null : _resend,
+                      child: const Text('Resend email'),
+                    ),
                   ],
                 ),
               ),

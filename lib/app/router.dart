@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../features/auth/pages/login_page.dart';
 import '../features/auth/pages/signup_page.dart';
 import '../features/auth/pages/splash_page.dart';
@@ -11,6 +12,13 @@ class AppRouter {
   static const signup = '/signup';
   static const verify = '/verify';
   static const shell = '/shell';
+
+  static String get initialRoute {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return login;
+    if (!user.emailVerified) return verify;
+    return shell;
+  }
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {

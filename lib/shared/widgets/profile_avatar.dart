@@ -20,7 +20,7 @@ class ProfileAvatar extends StatelessWidget {
           ? Image.asset(
               imagePath!,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _defaultIcon(),
+              errorBuilder: (_, _, _) => _defaultIcon(),
             )
           : _defaultIcon(),
     );

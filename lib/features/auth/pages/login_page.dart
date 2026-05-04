@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../shared/widgets/app_logo.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/primary_button.dart';
 import '../../../../shared/widgets/secondary_button.dart';
 import '../../../../app/router.dart';
+import '../../../../core/services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,35 +16,60 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final usernameController = TextEditingController();
+  final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final _auth = AuthService();
 
   bool showError = false;
+  String errorMessage = '';
+  bool loading = false;
 
   @override
   void dispose() {
-    usernameController.dispose();
+    emailController.dispose();
     passwordController.dispose();
     super.dispose();
   }
 
-  void _login() {
-    FocusScope.of(context).unfocus(); // dismiss keyboard
+  Future<void> _login() async {
+    FocusScope.of(context).unfocus();
 
     setState(() {
-      showError = passwordController.text != "123456";
+      loading = true;
+      showError = false;
     });
 
-    if (!showError) {
+    try {
+      await _auth.login(emailController.text.trim(), passwordController.text);
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppRouter.shell);
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        showError = true;
+        errorMessage = _friendlyError(e.code);
+      });
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  String _friendlyError(String code) {
+    switch (code) {
+      case 'user-not-found':
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
+      case 'too-many-requests':
+        return 'Too many attempts. Try again later.';
+      default:
+        return 'Something went wrong. Please try again.';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () =>
-          FocusScope.of(context).unfocus(), // tap outside to close keyboard
+      onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         body: SafeArea(
           child: Center(
@@ -61,10 +88,7 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 40),
 
-                    AppTextField(
-                      controller: usernameController,
-                      hint: 'Username',
-                    ),
+                    AppTextField(controller: emailController, hint: 'Email'),
 
                     const SizedBox(height: 16),
 
@@ -79,17 +103,17 @@ class _LoginPageState extends State<LoginPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: () {},
+                        onPressed: _showForgotPassword,
                         child: const Text('Forgot password?'),
                       ),
                     ),
 
                     if (showError)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
-                          'Invalid password. Please try again.',
-                          style: TextStyle(
+                          errorMessage,
+                          style: const TextStyle(
                             color: AppColors.error,
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -97,12 +121,15 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
 
-                    PrimaryButton(label: 'Log In', onPressed: _login),
+                    PrimaryButton(
+                      label: loading ? 'Logging in...' : 'Log In',
+                      onPressed: loading ? null : _login,
+                    ),
 
                     const SizedBox(height: 16),
 
                     SecondaryButton(
-                      label: "Don’t have an account? Sign Up",
+                      label: "Don't have an account? Sign Up",
                       onPressed: () {
                         Navigator.pushNamed(context, AppRouter.signup);
                       },
@@ -113,6 +140,35 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showForgotPassword() {
+    final controller = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: AppTextField(controller: controller, hint: 'Email'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await _auth.sendPasswordResetEmail(controller.text.trim());
+              if (!context.mounted) return;
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Password reset email sent.')),
+              );
+            },
+            child: const Text('Send'),
+          ),
+        ],
       ),
     );
   }

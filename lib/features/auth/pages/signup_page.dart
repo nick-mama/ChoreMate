@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/primary_button.dart';
+import '../../../../shared/widgets/secondary_button.dart';
+import '../../../core/services/auth_service.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -20,8 +23,11 @@ class _SignupPageState extends State<SignupPage> {
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  final _auth = AuthService();
 
   bool showError = false;
+  String errorMessage = '';
+  bool loading = false;
 
   @override
   void dispose() {
@@ -35,17 +41,61 @@ class _SignupPageState extends State<SignupPage> {
     super.dispose();
   }
 
-  void _signup() {
+  Future<void> _signup() async {
     FocusScope.of(context).unfocus();
 
+    if (passwordController.text != confirmPasswordController.text) {
+      setState(() {
+        showError = true;
+        errorMessage = 'Passwords do not match.';
+      });
+      return;
+    }
+
+    if (passwordController.text.length < 6) {
+      setState(() {
+        showError = true;
+        errorMessage = 'Password must be at least 6 characters.';
+      });
+      return;
+    }
+
     setState(() {
-      showError =
-          passwordController.text != confirmPasswordController.text ||
-          passwordController.text.length < 6;
+      loading = true;
+      showError = false;
     });
 
-    if (!showError) {
+    try {
+      await _auth.signup(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+        firstName: firstNameController.text.trim(),
+        lastName: lastNameController.text.trim(),
+        username: usernameController.text.trim(),
+        phone: phoneController.text.trim(),
+      );
+      if (!mounted) return;
       Navigator.pushNamed(context, AppRouter.verify);
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        showError = true;
+        errorMessage = _friendlyError(e.code);
+      });
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  String _friendlyError(String code) {
+    switch (code) {
+      case 'email-already-in-use':
+        return 'An account with that email already exists.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'weak-password':
+        return 'Password must be at least 6 characters.';
+      default:
+        return 'Something went wrong. Please try again.';
     }
   }
 
@@ -80,35 +130,29 @@ class _SignupPageState extends State<SignupPage> {
                       hint: 'First Name',
                     ),
                     const SizedBox(height: 14),
-
                     AppTextField(
                       controller: lastNameController,
                       hint: 'Last Name',
                     ),
                     const SizedBox(height: 14),
-
                     AppTextField(
                       controller: usernameController,
                       hint: 'Username',
                     ),
                     const SizedBox(height: 14),
-
                     AppTextField(controller: emailController, hint: 'Email'),
                     const SizedBox(height: 14),
-
                     AppTextField(
                       controller: phoneController,
                       hint: 'Phone Number (optional)',
                     ),
                     const SizedBox(height: 14),
-
                     AppTextField(
                       controller: passwordController,
                       hint: 'Password',
                       obscureText: true,
                     ),
                     const SizedBox(height: 14),
-
                     AppTextField(
                       controller: confirmPasswordController,
                       hint: 'Confirm Password',
@@ -117,11 +161,11 @@ class _SignupPageState extends State<SignupPage> {
                     const SizedBox(height: 18),
 
                     if (showError)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
                         child: Text(
-                          'Invalid password. Please try again.',
-                          style: TextStyle(
+                          errorMessage,
+                          style: const TextStyle(
                             color: AppColors.error,
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -129,7 +173,17 @@ class _SignupPageState extends State<SignupPage> {
                         ),
                       ),
 
-                    PrimaryButton(label: 'Sign Up', onPressed: _signup),
+                    PrimaryButton(
+                      label: loading ? 'Creating account...' : 'Sign Up',
+                      onPressed: loading ? null : _signup,
+                    ),
+
+                    SecondaryButton(
+                      label: "Already have an account? Log In",
+                      onPressed: () {
+                        Navigator.pushNamed(context, AppRouter.login);
+                      },
+                    ),
                   ],
                 ),
               ),
