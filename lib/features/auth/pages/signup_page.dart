@@ -178,6 +178,8 @@ class _SignupPageState extends State<SignupPage> {
                       onPressed: loading ? null : _signup,
                     ),
 
+                    const SizedBox(height: 16),
+
                     SecondaryButton(
                       label: "Already have an account? Log In",
                       onPressed: () {
