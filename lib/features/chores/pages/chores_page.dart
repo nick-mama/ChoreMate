@@ -74,9 +74,7 @@ class _ChoresPageState extends State<ChoresPage> {
   bool completedExpanded = true;
 
   int get totalChores => todoChores.length + completedChores.length;
-
   int get completedCount => completedChores.length;
-
   int get completedPercent {
     if (totalChores == 0) return 0;
     return ((completedCount / totalChores) * 100).round();
@@ -100,6 +98,22 @@ class _ChoresPageState extends State<ChoresPage> {
     });
   }
 
+  void _undoCompleted(CompletedChoreItem item) {
+    setState(() {
+      completedChores.remove(item);
+      todoChores.add(
+        ChoreItem(
+          name: item.name,
+          description: item.description,
+          deadline: item.deadline,
+          estimatedTime: item.estimatedTime,
+          roommate: item.roommate,
+          recurring: item.recurring,
+        ),
+      );
+    });
+  }
+
   void _showChoreOverlay(ChoreItem chore) {
     showModalBottomSheet(
       context: context,
@@ -113,10 +127,35 @@ class _ChoresPageState extends State<ChoresPage> {
             Navigator.pop(context);
           },
           onDelete: () {
-            setState(() {
-              todoChores.remove(chore);
-            });
             Navigator.pop(context);
+            _confirmDelete(
+              chore.name,
+              () => setState(() => todoChores.remove(chore)),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showCompletedChoreOverlay(CompletedChoreItem chore) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return _CompletedChoreOverlay(
+          chore: chore,
+          onUndo: () {
+            _undoCompleted(chore);
+            Navigator.pop(context);
+          },
+          onDelete: () {
+            Navigator.pop(context);
+            _confirmDelete(
+              chore.name,
+              () => setState(() => todoChores.remove(chore)),
+            );
           },
         );
       },
@@ -125,18 +164,14 @@ class _ChoresPageState extends State<ChoresPage> {
 
   String _formattedNow() {
     final now = DateTime.now();
-
     final month = now.month;
     final day = now.day;
     final year = now.year;
-
     int hour = now.hour;
     final minute = now.minute.toString().padLeft(2, '0');
     final suffix = hour >= 12 ? 'pm' : 'am';
-
     hour = hour % 12;
     if (hour == 0) hour = 12;
-
     return '$month/$day/$year, $hour:$minute$suffix';
   }
 
@@ -201,9 +236,7 @@ class _ChoresPageState extends State<ChoresPage> {
                           Checkbox(
                             value: recurring,
                             onChanged: (value) {
-                              setDialogState(() {
-                                recurring = value ?? false;
-                              });
+                              setDialogState(() => recurring = value ?? false);
                             },
                           ),
                           const Text('Recurring'),
@@ -215,9 +248,7 @@ class _ChoresPageState extends State<ChoresPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
+                  onPressed: () => Navigator.pop(context),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
@@ -228,7 +259,6 @@ class _ChoresPageState extends State<ChoresPage> {
                   onPressed: () {
                     final name = nameController.text.trim();
                     if (name.isEmpty) return;
-
                     setState(() {
                       todoChores.add(
                         ChoreItem(
@@ -249,7 +279,6 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       );
                     });
-
                     Navigator.pop(context);
                   },
                   child: const Text('Add'),
@@ -259,6 +288,33 @@ class _ChoresPageState extends State<ChoresPage> {
           },
         );
       },
+    );
+  }
+
+  void _confirmDelete(String choreName, VoidCallback onConfirm) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "$choreName"'),
+        content: const Text(
+          'Are you sure you want to delete this chore? Deleting this chore cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onConfirm();
+            },
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -321,11 +377,7 @@ class _ChoresPageState extends State<ChoresPage> {
               _SectionHeader(
                 title: 'To-Do',
                 expanded: todoExpanded,
-                onTap: () {
-                  setState(() {
-                    todoExpanded = !todoExpanded;
-                  });
-                },
+                onTap: () => setState(() => todoExpanded = !todoExpanded),
               ),
               const SizedBox(height: 12),
               if (todoExpanded) ...[
@@ -346,11 +398,8 @@ class _ChoresPageState extends State<ChoresPage> {
               _SectionHeader(
                 title: 'Completed',
                 expanded: completedExpanded,
-                onTap: () {
-                  setState(() {
-                    completedExpanded = !completedExpanded;
-                  });
-                },
+                onTap: () =>
+                    setState(() => completedExpanded = !completedExpanded),
               ),
               const SizedBox(height: 12),
               if (completedExpanded)
@@ -360,6 +409,7 @@ class _ChoresPageState extends State<ChoresPage> {
                     child: _CompletedChoreTile(
                       title: chore.name,
                       time: chore.completedAt,
+                      onTap: () => _showCompletedChoreOverlay(chore),
                     ),
                   ),
                 ),
@@ -378,12 +428,8 @@ class _ChoresHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: const [
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: AppLogo(type: LogoType.wordmark, width: 230),
-          ),
-        ),
+        AppLogo(type: LogoType.wordmark, width: 230),
+        Spacer(),
         Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.text),
       ],
     );
@@ -398,7 +444,6 @@ class _ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clamped = progress.clamp(0.0, 1.0);
-
     return Container(
       height: 12,
       width: double.infinity,
@@ -495,35 +540,44 @@ class _TodoChoreTile extends StatelessWidget {
 class _CompletedChoreTile extends StatelessWidget {
   final String title;
   final String time;
+  final VoidCallback onTap;
 
-  const _CompletedChoreTile({required this.title, required this.time});
+  const _CompletedChoreTile({
+    required this.title,
+    required this.time,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.field,
+    return Material(
+      color: AppColors.field,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 17,
-                color: AppColors.text,
-                fontWeight: FontWeight.w500,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    color: AppColors.text,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-            ),
+              Text(
+                time,
+                style: const TextStyle(fontSize: 14, color: AppColors.muted),
+              ),
+            ],
           ),
-          Text(
-            time,
-            style: const TextStyle(fontSize: 14, color: AppColors.muted),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -612,23 +666,86 @@ class _ChoreOverlay extends StatelessWidget {
   }
 }
 
-class _OverlayField extends StatelessWidget {
-  final String label;
-  final String value;
+class _CompletedChoreOverlay extends StatelessWidget {
+  final CompletedChoreItem chore;
+  final VoidCallback onUndo;
+  final VoidCallback onDelete;
 
-  const _OverlayField(this.label, this.value);
+  const _CompletedChoreOverlay({
+    required this.chore,
+    required this.onUndo,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.field,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    chore.name,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.text,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onUndo,
+                  icon: const Icon(Icons.undo, color: AppColors.text),
+                ),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete, color: AppColors.text),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _OverlayField('Description:', chore.description, dark: true),
+            _OverlayField('Deadline:', chore.deadline, dark: true),
+            _OverlayField('Estimated Time:', chore.estimatedTime, dark: true),
+            _OverlayField(
+              'Recurring?',
+              chore.recurring ? 'Yes' : 'No',
+              dark: true,
+            ),
+            _OverlayField('Roommate:', chore.roommate, dark: true),
+            _OverlayField('Completed:', chore.completedAt, dark: true),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OverlayField extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool dark;
+
+  const _OverlayField(this.label, this.value, {this.dark = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = dark ? AppColors.text : Colors.white;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: RichText(
         text: TextSpan(
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            height: 1.45,
-          ),
+          style: TextStyle(color: color, fontSize: 14, height: 1.45),
           children: [
             TextSpan(
               text: '$label\n',
