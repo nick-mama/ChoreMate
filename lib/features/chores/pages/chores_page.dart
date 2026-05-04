@@ -10,6 +10,9 @@ class ChoresPage extends StatefulWidget {
 }
 
 class _ChoresPageState extends State<ChoresPage> {
+  // TO-DO: update later to get roommate list from household
+  final List<String> roommates = ['Hillary', 'Garrett', 'Geoffrey', 'Nick'];
+
   final List<ChoreItem> todoChores = [
     ChoreItem(
       name: 'Tidying',
@@ -133,6 +136,10 @@ class _ChoresPageState extends State<ChoresPage> {
               () => setState(() => todoChores.remove(chore)),
             );
           },
+          onEdit: () {
+            Navigator.pop(context);
+            _showEditChoreDialog(chore);
+          },
         );
       },
     );
@@ -157,6 +164,10 @@ class _ChoresPageState extends State<ChoresPage> {
               () => setState(() => todoChores.remove(chore)),
             );
           },
+          onEdit: () {
+            Navigator.pop(context);
+            _showEditChoreDialog(chore);
+          },
         );
       },
     );
@@ -180,7 +191,7 @@ class _ChoresPageState extends State<ChoresPage> {
     final descriptionController = TextEditingController();
     final deadlineController = TextEditingController();
     final timeController = TextEditingController();
-    final roommateController = TextEditingController();
+    String? selectedRoommate;
     bool recurring = false;
 
     showDialog(
@@ -226,9 +237,19 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: roommateController,
-                        decoration: const InputDecoration(hintText: 'Roommate'),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedRoommate,
+                        hint: const Text('Roommate'),
+                        decoration: const InputDecoration(),
+                        items: roommates.map((name) {
+                          return DropdownMenuItem(
+                            value: name,
+                            child: Text(name),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() => selectedRoommate = value);
+                        },
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -272,9 +293,7 @@ class _ChoresPageState extends State<ChoresPage> {
                           estimatedTime: timeController.text.trim().isEmpty
                               ? 'Not set'
                               : timeController.text.trim(),
-                          roommate: roommateController.text.trim().isEmpty
-                              ? 'Unassigned'
-                              : roommateController.text.trim(),
+                          roommate: selectedRoommate ?? 'Unassigned',
                           recurring: recurring,
                         ),
                       );
@@ -282,6 +301,160 @@ class _ChoresPageState extends State<ChoresPage> {
                     Navigator.pop(context);
                   },
                   child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditChoreDialog(ChoreItem chore) {
+    final nameController = TextEditingController(text: chore.name);
+    final descriptionController = TextEditingController(
+      text: chore.description,
+    );
+    final deadlineController = TextEditingController(text: chore.deadline);
+    final timeController = TextEditingController(text: chore.estimatedTime);
+    String? selectedRoommate = roommates.contains(chore.roommate)
+        ? chore.roommate
+        : null;
+    bool recurring = chore.recurring;
+
+    showDialog(
+      context: context,
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              title: const Text('Edit Chore'),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: 360,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          hintText: 'Chore name',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descriptionController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          hintText: 'Description',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: deadlineController,
+                        decoration: const InputDecoration(
+                          hintText: 'Deadline (ex: 3/23/2026)',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: timeController,
+                        decoration: const InputDecoration(
+                          hintText: 'Estimated time',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: selectedRoommate,
+                        hint: const Text('Roommate'),
+                        decoration: const InputDecoration(),
+                        items: roommates.map((name) {
+                          return DropdownMenuItem(
+                            value: name,
+                            child: Text(name),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() => selectedRoommate = value);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: recurring,
+                            onChanged: (value) {
+                              setDialogState(() => recurring = value ?? false);
+                            },
+                          ),
+                          const Text('Recurring'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.tan,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    final name = nameController.text.trim();
+                    if (name.isEmpty) return;
+
+                    setState(() {
+                      if (chore is CompletedChoreItem) {
+                        final index = completedChores.indexOf(chore);
+                        if (index != -1) {
+                          completedChores[index] = CompletedChoreItem(
+                            name: name,
+                            description:
+                                descriptionController.text.trim().isEmpty
+                                ? 'No description added.'
+                                : descriptionController.text.trim(),
+                            deadline: deadlineController.text.trim().isEmpty
+                                ? 'No deadline'
+                                : deadlineController.text.trim(),
+                            estimatedTime: timeController.text.trim().isEmpty
+                                ? 'Not set'
+                                : timeController.text.trim(),
+                            roommate: selectedRoommate ?? 'Unassigned',
+                            recurring: recurring,
+                            completedAt: chore.completedAt,
+                          );
+                        }
+                      } else {
+                        final index = todoChores.indexOf(chore);
+                        if (index != -1) {
+                          todoChores[index] = ChoreItem(
+                            name: name,
+                            description:
+                                descriptionController.text.trim().isEmpty
+                                ? 'No description added.'
+                                : descriptionController.text.trim(),
+                            deadline: deadlineController.text.trim().isEmpty
+                                ? 'No deadline'
+                                : deadlineController.text.trim(),
+                            estimatedTime: timeController.text.trim().isEmpty
+                                ? 'Not set'
+                                : timeController.text.trim(),
+                            roommate: selectedRoommate ?? 'Unassigned',
+                            recurring: recurring,
+                          );
+                        }
+                      }
+                    });
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Save'),
                 ),
               ],
             );
@@ -609,11 +782,13 @@ class _ChoreOverlay extends StatelessWidget {
   final ChoreItem chore;
   final VoidCallback onComplete;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   const _ChoreOverlay({
     required this.chore,
     required this.onComplete,
     required this.onDelete,
+    required this.onEdit,
   });
 
   @override
@@ -647,6 +822,10 @@ class _ChoreOverlay extends StatelessWidget {
                   icon: const Icon(Icons.check, color: Colors.white),
                 ),
                 IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                ),
+                IconButton(
                   onPressed: onDelete,
                   icon: const Icon(Icons.delete, color: Colors.white),
                 ),
@@ -670,11 +849,13 @@ class _CompletedChoreOverlay extends StatelessWidget {
   final CompletedChoreItem chore;
   final VoidCallback onUndo;
   final VoidCallback onDelete;
+  final VoidCallback onEdit;
 
   const _CompletedChoreOverlay({
     required this.chore,
     required this.onUndo,
     required this.onDelete,
+    required this.onEdit,
   });
 
   @override
@@ -706,6 +887,10 @@ class _CompletedChoreOverlay extends StatelessWidget {
                 IconButton(
                   onPressed: onUndo,
                   icon: const Icon(Icons.undo, color: AppColors.text),
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, color: AppColors.text),
                 ),
                 IconButton(
                   onPressed: onDelete,
