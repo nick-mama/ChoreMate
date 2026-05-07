@@ -75,7 +75,12 @@ class _SignupPageState extends State<SignupPage> {
         phone: phoneController.text.trim(),
       );
       if (!mounted) return;
-      Navigator.pushNamed(context, AppRouter.verify);
+      // After signup, verify email → then household setup
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.verify,
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       setState(() {
         showError = true;
@@ -182,9 +187,7 @@ class _SignupPageState extends State<SignupPage> {
 
                     SecondaryButton(
                       label: "Already have an account? Log In",
-                      onPressed: () {
-                        Navigator.pushNamed(context, AppRouter.login);
-                      },
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ],
                 ),

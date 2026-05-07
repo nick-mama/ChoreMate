@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/services/household_service.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/primary_button.dart';
@@ -15,6 +17,7 @@ class HouseholdSetupPage extends StatefulWidget {
 
 class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
   final _service = HouseholdService();
+  final _authService = AuthService();
   final nameController = TextEditingController();
   final codeController = TextEditingController();
   final emailController = TextEditingController();
@@ -23,6 +26,12 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
   String errorMessage = '';
   bool showError = false;
   int selectedTab = 0;
+
+  String get _currentUsername {
+    final user = FirebaseAuth.instance.currentUser;
+    // prefer displayName; if none, use email
+    return user?.displayName ?? user?.email ?? 'Unknown';
+  }
 
   @override
   void dispose() {
@@ -126,6 +135,16 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> _signOut() async {
+    await _authService.logout();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRouter.login,
+      (route) => false,
+    );
   }
 
   @override
@@ -289,6 +308,36 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         onPressed: loading ? null : _joinByEmail,
                       ),
                     ],
+
+                    const SizedBox(height: 36),
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppColors.muted,
+                        ),
+                        children: [
+                          TextSpan(text: 'Logged in as $_currentUsername • '),
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.baseline,
+                            baseline: TextBaseline.alphabetic,
+                            child: GestureDetector(
+                              onTap: _signOut,
+                              child: const Text(
+                                'Sign out',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: AppColors.blue, // brand link blue
+                                  decorationColor: AppColors.blue,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),

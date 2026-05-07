@@ -11,21 +11,8 @@ class ChoreMateApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'ChoreMate',
       theme: AppTheme.light,
+      initialRoute: AppRouter.splash,
       onGenerateRoute: AppRouter.onGenerateRoute,
-      home: FutureBuilder<String>(
-        future: AppRouter.getInitialRoute(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          return Navigator(
-            onGenerateRoute: (settings) =>
-                AppRouter.onGenerateRoute(RouteSettings(name: snapshot.data)),
-          );
-        },
-      ),
     );
   }
 }

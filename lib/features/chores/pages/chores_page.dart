@@ -366,7 +366,7 @@ class _ChoresPageState extends State<ChoresPage> {
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: selectedRoommate,
+                        initialValue: selectedRoommate,
                         hint: const Text('Roommate'),
                         decoration: const InputDecoration(),
                         items: roommates.map((name) {
