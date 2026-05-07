@@ -42,7 +42,7 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await _auth.login(emailController.text.trim(), passwordController.text);
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, AppRouter.shell);
+      Navigator.pushReplacementNamed(context, AppRouter.splash);
     } on FirebaseAuthException catch (e) {
       setState(() {
         showError = true;

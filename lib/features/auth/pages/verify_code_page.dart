@@ -31,7 +31,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
         _pollingTimer?.cancel();
         Navigator.pushNamedAndRemoveUntil(
           context,
-          AppRouter.shell,
+          AppRouter.splash,
           (route) => false,
         );
       }
@@ -69,7 +69,7 @@ class _VerifyCodePageState extends State<VerifyCodePage> {
       _pollingTimer?.cancel();
       Navigator.pushNamedAndRemoveUntil(
         context,
-        AppRouter.shell,
+        AppRouter.splash,
         (route) => false,
       );
     } else {

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_logo.dart';
 
 class AccountPage extends StatefulWidget {
@@ -13,6 +17,60 @@ class _AccountPageState extends State<AccountPage> {
   final List<double> weeklyValues = [2, 4, 5, 3];
   final List<String> weekLabels = ['Mar 2', 'Mar 9', 'Mar 16', 'Mar 23'];
 
+  String _displayName = '';
+  String _username = '';
+  String _householdName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get(const GetOptions(source: Source.server));
+
+    final data = doc.data();
+    if (data == null) return;
+
+    final firstName = data['firstName'] ?? '';
+    final lastName = data['lastName'] ?? '';
+    final username = data['username'] ?? '';
+    final householdId = data['householdId'] ?? '';
+
+    String householdName = '';
+    if (householdId.isNotEmpty) {
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get(const GetOptions(source: Source.server));
+      householdName = householdDoc.data()?['name'] ?? '';
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _displayName = '$firstName $lastName'.trim();
+      _username = username;
+      _householdName = householdName;
+    });
+  }
+
+  Future<void> _signOut() async {
+    await AuthService().logout();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      AppRouter.login,
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,7 +83,12 @@ class _AccountPageState extends State<AccountPage> {
             children: [
               const _AccountHeader(),
               const SizedBox(height: 28),
-              const _ProfileSection(),
+              _ProfileSection(
+                displayName: _displayName,
+                username: _username,
+                householdName: _householdName,
+                onSignOut: _signOut,
+              ),
               const SizedBox(height: 26),
               const Text(
                 'Chores Completed',
@@ -103,7 +166,17 @@ class _AccountHeader extends StatelessWidget {
 }
 
 class _ProfileSection extends StatelessWidget {
-  const _ProfileSection();
+  final String displayName;
+  final String username;
+  final String householdName;
+  final VoidCallback onSignOut;
+
+  const _ProfileSection({
+    required this.displayName,
+    required this.username,
+    required this.householdName,
+    required this.onSignOut,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -116,34 +189,43 @@ class _ProfileSection extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Name',
-                style: TextStyle(
+              Text(
+                displayName.isNotEmpty ? displayName : 'Name',
+                style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text,
                 ),
               ),
+              Text(
+                username.isNotEmpty ? '@$username' : 'Username',
+                style: const TextStyle(fontSize: 16, color: AppColors.text),
+              ),
               const SizedBox(height: 4),
-              const Text(
-                'Username',
-                style: TextStyle(fontSize: 16, color: AppColors.text),
+              Text(
+                householdName,
+                style: const TextStyle(fontSize: 16, color: AppColors.muted),
               ),
               const SizedBox(height: 18),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+              Row(
                 children: [
-                  _ActionButton(
-                    icon: Icons.settings_outlined,
-                    label: 'Edit Profile',
-                    onTap: () {},
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.settings_outlined,
+                      label: 'Settings',
+                      onTap: () {},
+                    ),
                   ),
-                  _ActionButton(
-                    icon: Icons.ios_share_outlined,
-                    label: 'Share',
-                    onTap: () {},
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _ActionButton(
+                      icon: Icons.ios_share_outlined,
+                      label: 'Share',
+                      onTap: () {},
+                    ),
                   ),
+                  const SizedBox(width: 10),
+                  SizedBox(child: _LogOutButton(onTap: onSignOut)),
                 ],
               ),
             ],
@@ -186,22 +268,51 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 56,
+      height: 44,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.tan,
           foregroundColor: Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
         ),
         onPressed: onTap,
-        icon: Icon(icon, size: 24),
+        icon: Icon(icon, size: 18),
         label: Text(
           label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+        ),
+      ),
+    );
+  }
+}
+
+class _LogOutButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _LogOutButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.field,
+          foregroundColor: AppColors.muted,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        onPressed: onTap,
+        child: const Text(
+          'Log Out',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
       ),
     );

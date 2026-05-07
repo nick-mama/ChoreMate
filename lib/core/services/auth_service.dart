@@ -9,10 +9,33 @@ class AuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   Future<UserCredential> login(String email, String password) async {
-    return await _auth.signInWithEmailAndPassword(
+    final credential = await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
+
+    await _syncDisplayNameIfMissing();
+
+    return credential;
+  }
+
+  Future<void> _syncDisplayNameIfMissing() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if (user.displayName == null || user.displayName!.isEmpty) {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      final username = doc.data()?['username'];
+
+      if (username != null) {
+        await user.updateDisplayName(username);
+        await user.reload();
+      }
+    }
   }
 
   Future<void> signup({
@@ -27,6 +50,8 @@ class AuthService {
       email: email,
       password: password,
     );
+
+    await credential.user!.updateDisplayName(username);
 
     final uid = credential.user!.uid;
 
