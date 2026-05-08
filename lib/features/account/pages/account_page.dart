@@ -180,56 +180,64 @@ class _ProfileSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _ProfileAvatarBox(),
-        const SizedBox(width: 18),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                displayName.isNotEmpty ? displayName : 'Name',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              Text(
-                username.isNotEmpty ? '@$username' : 'Username',
-                style: const TextStyle(fontSize: 16, color: AppColors.text),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                householdName,
-                style: const TextStyle(fontSize: 16, color: AppColors.muted),
-              ),
-              const SizedBox(height: 18),
-              Row(
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _ProfileAvatarBox(),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.settings_outlined,
-                      label: 'Settings',
-                      onTap: () {},
+                  Text(
+                    displayName.isNotEmpty ? displayName : 'Name',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.text,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ActionButton(
-                      icon: Icons.ios_share_outlined,
-                      label: 'Share',
-                      onTap: () {},
+                  Text(
+                    username.isNotEmpty ? '@$username' : 'Username',
+                    style: const TextStyle(fontSize: 16, color: AppColors.text),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    householdName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: AppColors.muted,
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  SizedBox(child: _LogOutButton(onTap: onSignOut)),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.settings_outlined,
+                label: 'Settings',
+                onTap: () {},
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.ios_share_outlined,
+                label: 'Share',
+                onTap: () {},
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: _LogOutButton(onTap: onSignOut)),
+          ],
         ),
       ],
     );
@@ -301,8 +309,8 @@ class _LogOutButton extends StatelessWidget {
       height: 44,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.field,
-          foregroundColor: AppColors.muted,
+          backgroundColor: AppColors.cream,
+          foregroundColor: AppColors.text,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           shape: RoundedRectangleBorder(
