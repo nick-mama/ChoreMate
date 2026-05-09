@@ -1,87 +1,268 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  bool _isLoading = true;
+
+  String _displayName = 'Person Name';
+  String _householdName = 'Household';
+
+  int _householdCompletedPercent = 0;
+
+  List<DashboardLegendItem> _personalItems = [];
+  List<DashboardLegendItem> _householdItems = [];
+
+  final List<Color> _memberColors = const [
+    Color(0xFF8B63D2),
+    Color(0xFF4A2DE2),
+    Color(0xFF4965E0),
+    Color(0xFFAE4CC7),
+    Color(0xFFD9AB63),
+    Color(0xFF6FB2D9),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+  }
+
+  Future<void> _loadDashboardData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+    final weekEnd = weekStart.add(const Duration(days: 7));
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final userData = userDoc.data();
+    if (userData == null) return;
+
+    final householdId = userData['householdId'] ?? '';
+    final firstName = userData['firstName'] ?? '';
+    final lastName = userData['lastName'] ?? '';
+
+    String householdName = 'Household';
+
+    if (householdId.toString().isNotEmpty) {
+      final householdDoc = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
+
+      householdName = householdDoc.data()?['name'] ?? 'Household';
+    }
+
+    final choresSnapshot = await FirebaseFirestore.instance
+        .collection('chores')
+        .where('householdId', isEqualTo: householdId)
+        .get();
+
+    final chores = choresSnapshot.docs.map((doc) => doc.data()).toList();
+
+    final personalChores = chores.where((chore) {
+      return chore['assignedTo'] == user.uid;
+    }).toList();
+
+    final completed = personalChores.where((chore) {
+      return chore['completed'] == true;
+    }).length;
+
+    final overdueTodo = personalChores.where((chore) {
+      final dueDate = _readDate(chore['dueDate']);
+      if (dueDate == null) return false;
+
+      return chore['completed'] != true && dueDate.isBefore(weekStart);
+    }).length;
+
+    final todoThisWeek = personalChores.where((chore) {
+      final dueDate = _readDate(chore['dueDate']);
+      if (dueDate == null) return false;
+
+      return chore['completed'] != true &&
+          !dueDate.isBefore(weekStart) &&
+          dueDate.isBefore(weekEnd);
+    }).length;
+
+    final futureTodo = personalChores.where((chore) {
+      final dueDate = _readDate(chore['dueDate']);
+      if (dueDate == null) return false;
+
+      return chore['completed'] != true && !dueDate.isBefore(weekEnd);
+    }).length;
+
+    final personalItems = [
+      DashboardLegendItem(
+        label: 'Completed',
+        value: completed.toDouble(),
+        displayPercent: _percent(completed, personalChores.length),
+        color: const Color(0xFF8B63D2),
+      ),
+      DashboardLegendItem(
+        label: 'Overdue To-do',
+        value: overdueTodo.toDouble(),
+        displayPercent: _percent(overdueTodo, personalChores.length),
+        color: const Color(0xFFBFBFBF),
+      ),
+      DashboardLegendItem(
+        label: 'To-do This Week',
+        value: todoThisWeek.toDouble(),
+        displayPercent: _percent(todoThisWeek, personalChores.length),
+        color: const Color(0xFFD9AB63),
+      ),
+      DashboardLegendItem(
+        label: 'Future To-do',
+        value: futureTodo.toDouble(),
+        displayPercent: _percent(futureTodo, personalChores.length),
+        color: const Color(0xFF6FB2D9),
+      ),
+    ].where((item) => item.value > 0).toList();
+
+    final weeklyChores = chores.where((chore) {
+      final dueDate = _readDate(chore['dueDate']);
+      if (dueDate == null) return false;
+
+      return !dueDate.isBefore(weekStart) && dueDate.isBefore(weekEnd);
+    }).toList();
+
+    final completedThisWeek = weeklyChores.where((chore) {
+      return chore['completed'] == true;
+    }).length;
+
+    final todoCountsByMember = <String, int>{};
+
+    for (final chore in weeklyChores) {
+      if (chore['completed'] == true) continue;
+
+      final name = chore['assignedToName'] ?? 'Unassigned';
+      todoCountsByMember[name] = (todoCountsByMember[name] ?? 0) + 1;
+    }
+
+    final memberNames = todoCountsByMember.keys.toList();
+    final householdItems = <DashboardLegendItem>[];
+
+    if (completedThisWeek > 0) {
+      householdItems.add(
+        DashboardLegendItem(
+          label: 'Completed',
+          value: completedThisWeek.toDouble(),
+          displayPercent: _percent(completedThisWeek, weeklyChores.length),
+          color: const Color(0xFF8B63D2),
+        ),
+      );
+    }
+
+    for (final name in memberNames) {
+      final index = memberNames.indexOf(name);
+      final count = todoCountsByMember[name] ?? 0;
+
+      householdItems.add(
+        DashboardLegendItem(
+          label: '$name To-do',
+          value: count.toDouble(),
+          displayPercent: _percent(count, weeklyChores.length),
+          color: _memberColors[(index + 1) % _memberColors.length],
+        ),
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _displayName = '$firstName $lastName'.trim().isNotEmpty
+          ? '$firstName $lastName'.trim()
+          : 'Person Name';
+      _householdName = householdName;
+      _personalItems = personalItems;
+      _householdItems = householdItems;
+      _householdCompletedPercent = _percent(
+        completedThisWeek,
+        weeklyChores.length,
+      );
+      _isLoading = false;
+    });
+  }
+
+  DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  int _percent(int value, int total) {
+    if (total == 0) return 0;
+    return ((value / total) * 100).round();
+  }
+
+  int _personalCompletionPercent() {
+    final total = _personalItems.fold<double>(0, (sum, item) {
+      return sum + item.value;
+    });
+
+    if (total == 0) return 0;
+
+    final completed = _personalItems
+        .where((item) => item.label == 'Completed')
+        .fold<double>(0, (sum, item) {
+          return sum + item.value;
+        });
+
+    return ((completed / total) * 100).round();
+  }
+
+  String _weekLabel() {
+    final now = DateTime.now();
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+
+    return 'Week of ${_monthName(weekStart.month)} ${weekStart.day}, ${weekStart.year}';
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[month - 1];
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const personalWeekLabel = 'Week of April 15, 2026';
-    const householdWeekLabel = 'Week of April 15, 2026';
-
-    final personalItems = <DashboardLegendItem>[
-      const DashboardLegendItem(
-        label: 'Laundry',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF8B63D2),
-      ),
-      const DashboardLegendItem(
-        label: 'Dishwashing',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFFD9AB63),
-      ),
-      const DashboardLegendItem(
-        label: 'Trash',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF6FB2D9),
-      ),
-      const DashboardLegendItem(
-        label: 'Vacuuming',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF5E82F2),
-      ),
-      const DashboardLegendItem(
-        label: 'Dusting',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFFD3C45D),
-      ),
-      const DashboardLegendItem(
-        label: 'Tidying',
-        value: 1,
-        displayPercent: 0,
-        color: Color(0xFFB45AC1),
-      ),
-    ];
-
-    final householdItems = <DashboardLegendItem>[
-      const DashboardLegendItem(
-        label: 'Hillary',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF8B63D2),
-      ),
-      const DashboardLegendItem(
-        label: 'Garrett',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF4A2DE2),
-      ),
-      const DashboardLegendItem(
-        label: 'Geoffrey',
-        value: 1,
-        displayPercent: 100,
-        color: Color(0xFF4965E0),
-      ),
-      const DashboardLegendItem(
-        label: 'Nick',
-        value: 1,
-        displayPercent: 83,
-        color: Color(0xFFAE4CC7),
-      ),
-      const DashboardLegendItem(
-        label: 'Remaining',
-        value: 0.2,
-        displayPercent: 5,
-        color: Color(0xFFBFBFBF),
-      ),
-    ];
+    final weekLabel = _weekLabel();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -93,21 +274,25 @@ class DashboardPage extends StatelessWidget {
             children: [
               const _DashboardHeader(),
               const SizedBox(height: 20),
-              DashboardSummaryCard(
-                title: 'Person Name',
-                weekLabel: personalWeekLabel,
-                centerPercent: 83,
-                items: personalItems,
-                rightColumnTitle: 'Chore',
-              ),
-              const SizedBox(height: 22),
-              DashboardSummaryCard(
-                title: 'Insert Awesome Group Name',
-                weekLabel: householdWeekLabel,
-                centerPercent: 95,
-                items: householdItems,
-                rightColumnTitle: 'Mate',
-              ),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else ...[
+                DashboardSummaryCard(
+                  title: _displayName,
+                  weekLabel: weekLabel,
+                  centerPercent: _personalCompletionPercent(),
+                  items: _personalItems,
+                  rightColumnTitle: 'Status',
+                ),
+                const SizedBox(height: 22),
+                DashboardSummaryCard(
+                  title: _householdName,
+                  weekLabel: weekLabel,
+                  centerPercent: _householdCompletedPercent,
+                  items: _householdItems,
+                  rightColumnTitle: 'Mate',
+                ),
+              ],
             ],
           ),
         ),
@@ -159,97 +344,113 @@ class DashboardSummaryCard extends StatelessWidget {
         color: AppColors.cream,
         borderRadius: BorderRadius.circular(28),
       ),
-      child: Column(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 560;
+
+          final chart = SizedBox(
+            width: isNarrow ? double.infinity : 230,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  weekLabel,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    height: 1.25,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  height: 170,
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.text,
+                      PieChart(
+                        PieChartData(
+                          sectionsSpace: 0,
+                          centerSpaceRadius: 48,
+                          startDegreeOffset: 140,
+                          sections: items.isEmpty
+                              ? [
+                                  PieChartSectionData(
+                                    value: 1,
+                                    color: const Color(0xFFBFBFBF),
+                                    radius: 28,
+                                    showTitle: false,
+                                  ),
+                                ]
+                              : items.map((item) {
+                                  return PieChartSectionData(
+                                    value: item.value,
+                                    color: item.color,
+                                    radius: 28,
+                                    showTitle: false,
+                                  );
+                                }).toList(),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        weekLabel,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          height: 1.25,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      SizedBox(
-                        height: 170,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            PieChart(
-                              PieChartData(
-                                sectionsSpace: 0,
-                                centerSpaceRadius: 48,
-                                startDegreeOffset: 140,
-                                sections: items
-                                    .map(
-                                      (item) => PieChartSectionData(
-                                        value: item.value,
-                                        color: item.color,
-                                        radius: 28,
-                                        showTitle: false,
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Total Value',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.text,
                             ),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text(
-                                  'Total Value',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.text,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '$centerPercent%',
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.text,
-                                  ),
-                                ),
-                              ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '$centerPercent%',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
-              SizedBox(
-                width: 210,
-                child: _LegendTable(
-                  items: items,
-                  middleHeader: rightColumnTitle,
-                ),
-              ),
+              ],
+            ),
+          );
+
+          final legend = _LegendTable(
+            items: items,
+            middleHeader: rightColumnTitle,
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [chart, const SizedBox(height: 20), legend],
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              chart,
+              const SizedBox(width: 24),
+              Expanded(child: legend),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -263,6 +464,13 @@ class _LegendTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Text(
+        'No chores found for this week.',
+        style: TextStyle(fontSize: 16, color: AppColors.text),
+      );
+    }
+
     return Column(
       children: [
         const SizedBox(height: 2),
@@ -291,7 +499,7 @@ class _LegendTable extends StatelessWidget {
               ),
             ),
             const SizedBox(
-              width: 34,
+              width: 42,
               child: Text(
                 '%',
                 textAlign: TextAlign.right,
@@ -324,6 +532,7 @@ class _LegendTable extends StatelessWidget {
                 Expanded(
                   child: Text(
                     item.label,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 16, color: AppColors.text),
                   ),
                 ),

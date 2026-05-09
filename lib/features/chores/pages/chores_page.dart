@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
@@ -10,111 +12,152 @@ class ChoresPage extends StatefulWidget {
 }
 
 class _ChoresPageState extends State<ChoresPage> {
-  // TO-DO: update later to get roommate list from household
-  final List<String> roommates = ['Hillary', 'Garrett', 'Geoffrey', 'Nick'];
-
-  final List<ChoreItem> todoChores = [
-    ChoreItem(
-      name: 'Tidying',
-      description:
-          'Tidy the house by picking up loose clothes, arranging the pillows, and watering the plants.',
-      deadline: '3/23/2026',
-      estimatedTime: '1-2 hours',
-      roommate: 'Geoffrey',
-      recurring: false,
-    ),
-  ];
-
-  final List<CompletedChoreItem> completedChores = [
-    CompletedChoreItem(
-      name: 'Laundry',
-      description: 'Wash, dry, and fold clothes.',
-      deadline: '3/20/2026',
-      estimatedTime: '1 hour',
-      roommate: 'Geoffrey',
-      recurring: true,
-      completedAt: '3/20/2026, 3:22pm',
-    ),
-    CompletedChoreItem(
-      name: 'Dishwashing',
-      description: 'Wash dishes and wipe kitchen counters.',
-      deadline: '3/19/2026',
-      estimatedTime: '45 min',
-      roommate: 'Geoffrey',
-      recurring: true,
-      completedAt: '3/19/2026, 1:18pm',
-    ),
-    CompletedChoreItem(
-      name: 'Trash',
-      description: 'Take out trash and replace liners.',
-      deadline: '3/19/2026',
-      estimatedTime: '15 min',
-      roommate: 'Geoffrey',
-      recurring: true,
-      completedAt: '3/19/2026, 11:01am',
-    ),
-    CompletedChoreItem(
-      name: 'Vacuuming',
-      description: 'Vacuum common areas and hallway.',
-      deadline: '3/18/2026',
-      estimatedTime: '30 min',
-      roommate: 'Geoffrey',
-      recurring: true,
-      completedAt: '3/18/2026, 7:22pm',
-    ),
-    CompletedChoreItem(
-      name: 'Dusting',
-      description: 'Dust shelves, tables, and TV stand.',
-      deadline: '3/16/2026',
-      estimatedTime: '25 min',
-      roommate: 'Geoffrey',
-      recurring: true,
-      completedAt: '3/16/2026, 5:13pm',
-    ),
-  ];
+  final _db = FirebaseFirestore.instance;
+  final _auth = FirebaseAuth.instance;
 
   bool todoExpanded = true;
   bool completedExpanded = true;
+  bool _loadingHousehold = true;
 
-  int get totalChores => todoChores.length + completedChores.length;
-  int get completedCount => completedChores.length;
-  int get completedPercent {
-    if (totalChores == 0) return 0;
-    return ((completedCount / totalChores) * 100).round();
+  String _householdId = '';
+  List<HouseholdMember> roommates = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHousehold();
   }
 
-  void _completeTodo(ChoreItem item) {
-    setState(() {
-      todoChores.remove(item);
-      completedChores.insert(
-        0,
-        CompletedChoreItem(
-          name: item.name,
-          description: item.description,
-          deadline: item.deadline,
-          estimatedTime: item.estimatedTime,
-          roommate: item.roommate,
-          recurring: item.recurring,
-          completedAt: _formattedNow(),
-        ),
+  Future<void> _loadHousehold() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final userDoc = await _db.collection('users').doc(user.uid).get();
+    final userData = userDoc.data();
+    if (userData == null) return;
+
+    final householdId = userData['householdId'] ?? '';
+
+    final usersSnapshot = await _db
+        .collection('users')
+        .where('householdId', isEqualTo: householdId)
+        .get();
+
+    final loadedRoommates = usersSnapshot.docs.map((doc) {
+      final data = doc.data();
+      final firstName = data['firstName'] ?? '';
+      final lastName = data['lastName'] ?? '';
+      final username = data['username'] ?? '';
+
+      final fullName = '$firstName $lastName'.trim();
+
+      return HouseholdMember(
+        uid: doc.id,
+        name: fullName.isNotEmpty ? fullName : username,
       );
+    }).toList();
+
+    if (!mounted) return;
+
+    setState(() {
+      _householdId = householdId;
+      roommates = loadedRoommates;
+      _loadingHousehold = false;
     });
   }
 
-  void _undoCompleted(CompletedChoreItem item) {
-    setState(() {
-      completedChores.remove(item);
-      todoChores.add(
-        ChoreItem(
-          name: item.name,
-          description: item.description,
-          deadline: item.deadline,
-          estimatedTime: item.estimatedTime,
-          roommate: item.roommate,
-          recurring: item.recurring,
-        ),
-      );
+  Stream<List<ChoreItem>> _choresStream() {
+    if (_householdId.isEmpty) {
+      return const Stream.empty();
+    }
+
+    return _db
+        .collection('chores')
+        .where('householdId', isEqualTo: _householdId)
+        .snapshots()
+        .map((snapshot) {
+          final chores = snapshot.docs.map((doc) {
+            return ChoreItem.fromFirestore(doc.id, doc.data());
+          }).toList();
+
+          chores.sort((a, b) {
+            final aDate = a.dueDate;
+            final bDate = b.dueDate;
+
+            if (aDate == null && bDate == null) return 0;
+            if (aDate == null) return 1;
+            if (bDate == null) return -1;
+
+            return aDate.compareTo(bDate);
+          });
+
+          return chores;
+        });
+  }
+
+  Future<void> _addChore({
+    required String name,
+    required String description,
+    required DateTime? dueDate,
+    required String estimatedTime,
+    required HouseholdMember? roommate,
+    required bool recurring,
+  }) async {
+    await _db.collection('chores').add({
+      'householdId': _householdId,
+      'name': name,
+      'description': description,
+      'dueDate': dueDate == null ? null : Timestamp.fromDate(dueDate),
+      'estimatedTime': estimatedTime,
+      'assignedTo': roommate?.uid,
+      'assignedToName': roommate?.name ?? 'Unassigned',
+      'recurring': recurring,
+      'completed': false,
+      'completedAt': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<void> _updateChore(
+    ChoreItem chore, {
+    required String name,
+    required String description,
+    required DateTime? dueDate,
+    required String estimatedTime,
+    required HouseholdMember? roommate,
+    required bool recurring,
+  }) async {
+    await _db.collection('chores').doc(chore.id).update({
+      'name': name,
+      'description': description,
+      'dueDate': dueDate == null ? null : Timestamp.fromDate(dueDate),
+      'estimatedTime': estimatedTime,
+      'assignedTo': roommate?.uid,
+      'assignedToName': roommate?.name ?? 'Unassigned',
+      'recurring': recurring,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _completeTodo(ChoreItem chore) async {
+    await _db.collection('chores').doc(chore.id).update({
+      'completed': true,
+      'completedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _undoCompleted(ChoreItem chore) async {
+    await _db.collection('chores').doc(chore.id).update({
+      'completed': false,
+      'completedAt': null,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _deleteChore(ChoreItem chore) async {
+    await _db.collection('chores').doc(chore.id).delete();
   }
 
   void _showChoreOverlay(ChoreItem chore) {
@@ -125,16 +168,13 @@ class _ChoresPageState extends State<ChoresPage> {
       builder: (_) {
         return _ChoreOverlay(
           chore: chore,
-          onComplete: () {
-            _completeTodo(chore);
+          onComplete: () async {
             Navigator.pop(context);
+            await _completeTodo(chore);
           },
           onDelete: () {
             Navigator.pop(context);
-            _confirmDelete(
-              chore.name,
-              () => setState(() => todoChores.remove(chore)),
-            );
+            _confirmDelete(chore.name, () => _deleteChore(chore));
           },
           onEdit: () {
             Navigator.pop(context);
@@ -145,7 +185,7 @@ class _ChoresPageState extends State<ChoresPage> {
     );
   }
 
-  void _showCompletedChoreOverlay(CompletedChoreItem chore) {
+  void _showCompletedChoreOverlay(ChoreItem chore) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -153,16 +193,13 @@ class _ChoresPageState extends State<ChoresPage> {
       builder: (_) {
         return _CompletedChoreOverlay(
           chore: chore,
-          onUndo: () {
-            _undoCompleted(chore);
+          onUndo: () async {
             Navigator.pop(context);
+            await _undoCompleted(chore);
           },
           onDelete: () {
             Navigator.pop(context);
-            _confirmDelete(
-              chore.name,
-              () => setState(() => todoChores.remove(chore)),
-            );
+            _confirmDelete(chore.name, () => _deleteChore(chore));
           },
           onEdit: () {
             Navigator.pop(context);
@@ -173,25 +210,13 @@ class _ChoresPageState extends State<ChoresPage> {
     );
   }
 
-  String _formattedNow() {
-    final now = DateTime.now();
-    final month = now.month;
-    final day = now.day;
-    final year = now.year;
-    int hour = now.hour;
-    final minute = now.minute.toString().padLeft(2, '0');
-    final suffix = hour >= 12 ? 'pm' : 'am';
-    hour = hour % 12;
-    if (hour == 0) hour = 12;
-    return '$month/$day/$year, $hour:$minute$suffix';
-  }
-
   void _showAddChoreDialog(BuildContext context) {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
     final deadlineController = TextEditingController();
     final timeController = TextEditingController();
-    String? selectedRoommate;
+
+    HouseholdMember? selectedRoommate;
     bool recurring = false;
 
     showDialog(
@@ -237,14 +262,14 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
+                      DropdownButtonFormField<HouseholdMember>(
                         initialValue: selectedRoommate,
                         hint: const Text('Roommate'),
                         decoration: const InputDecoration(),
-                        items: roommates.map((name) {
+                        items: roommates.map((member) {
                           return DropdownMenuItem(
-                            value: name,
-                            child: Text(name),
+                            value: member,
+                            child: Text(member.name),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -277,27 +302,24 @@ class _ChoresPageState extends State<ChoresPage> {
                     backgroundColor: AppColors.tan,
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     final name = nameController.text.trim();
                     if (name.isEmpty) return;
-                    setState(() {
-                      todoChores.add(
-                        ChoreItem(
-                          name: name,
-                          description: descriptionController.text.trim().isEmpty
-                              ? 'No description added.'
-                              : descriptionController.text.trim(),
-                          deadline: deadlineController.text.trim().isEmpty
-                              ? 'No deadline'
-                              : deadlineController.text.trim(),
-                          estimatedTime: timeController.text.trim().isEmpty
-                              ? 'Not set'
-                              : timeController.text.trim(),
-                          roommate: selectedRoommate ?? 'Unassigned',
-                          recurring: recurring,
-                        ),
-                      );
-                    });
+
+                    await _addChore(
+                      name: name,
+                      description: descriptionController.text.trim().isEmpty
+                          ? 'No description added.'
+                          : descriptionController.text.trim(),
+                      dueDate: _parseDate(deadlineController.text.trim()),
+                      estimatedTime: timeController.text.trim().isEmpty
+                          ? 'Not set'
+                          : timeController.text.trim(),
+                      roommate: selectedRoommate,
+                      recurring: recurring,
+                    );
+
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   },
                   child: const Text('Add'),
@@ -317,9 +339,11 @@ class _ChoresPageState extends State<ChoresPage> {
     );
     final deadlineController = TextEditingController(text: chore.deadline);
     final timeController = TextEditingController(text: chore.estimatedTime);
-    String? selectedRoommate = roommates.contains(chore.roommate)
-        ? chore.roommate
-        : null;
+
+    HouseholdMember? selectedRoommate = roommates
+        .where((member) => member.uid == chore.assignedTo)
+        .firstOrNull;
+
     bool recurring = chore.recurring;
 
     showDialog(
@@ -365,14 +389,14 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
+                      DropdownButtonFormField<HouseholdMember>(
                         initialValue: selectedRoommate,
                         hint: const Text('Roommate'),
                         decoration: const InputDecoration(),
-                        items: roommates.map((name) {
+                        items: roommates.map((member) {
                           return DropdownMenuItem(
-                            value: name,
-                            child: Text(name),
+                            value: member,
+                            child: Text(member.name),
                           );
                         }).toList(),
                         onChanged: (value) {
@@ -405,53 +429,25 @@ class _ChoresPageState extends State<ChoresPage> {
                     backgroundColor: AppColors.tan,
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: () {
+                  onPressed: () async {
                     final name = nameController.text.trim();
                     if (name.isEmpty) return;
 
-                    setState(() {
-                      if (chore is CompletedChoreItem) {
-                        final index = completedChores.indexOf(chore);
-                        if (index != -1) {
-                          completedChores[index] = CompletedChoreItem(
-                            name: name,
-                            description:
-                                descriptionController.text.trim().isEmpty
-                                ? 'No description added.'
-                                : descriptionController.text.trim(),
-                            deadline: deadlineController.text.trim().isEmpty
-                                ? 'No deadline'
-                                : deadlineController.text.trim(),
-                            estimatedTime: timeController.text.trim().isEmpty
-                                ? 'Not set'
-                                : timeController.text.trim(),
-                            roommate: selectedRoommate ?? 'Unassigned',
-                            recurring: recurring,
-                            completedAt: chore.completedAt,
-                          );
-                        }
-                      } else {
-                        final index = todoChores.indexOf(chore);
-                        if (index != -1) {
-                          todoChores[index] = ChoreItem(
-                            name: name,
-                            description:
-                                descriptionController.text.trim().isEmpty
-                                ? 'No description added.'
-                                : descriptionController.text.trim(),
-                            deadline: deadlineController.text.trim().isEmpty
-                                ? 'No deadline'
-                                : deadlineController.text.trim(),
-                            estimatedTime: timeController.text.trim().isEmpty
-                                ? 'Not set'
-                                : timeController.text.trim(),
-                            roommate: selectedRoommate ?? 'Unassigned',
-                            recurring: recurring,
-                          );
-                        }
-                      }
-                    });
+                    await _updateChore(
+                      chore,
+                      name: name,
+                      description: descriptionController.text.trim().isEmpty
+                          ? 'No description added.'
+                          : descriptionController.text.trim(),
+                      dueDate: _parseDate(deadlineController.text.trim()),
+                      estimatedTime: timeController.text.trim().isEmpty
+                          ? 'Not set'
+                          : timeController.text.trim(),
+                      roommate: selectedRoommate,
+                      recurring: recurring,
+                    );
 
+                    if (!context.mounted) return;
                     Navigator.pop(context);
                   },
                   child: const Text('Save'),
@@ -464,7 +460,7 @@ class _ChoresPageState extends State<ChoresPage> {
     );
   }
 
-  void _confirmDelete(String choreName, VoidCallback onConfirm) {
+  void _confirmDelete(String choreName, Future<void> Function() onConfirm) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -479,9 +475,9 @@ class _ChoresPageState extends State<ChoresPage> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              onConfirm();
+              await onConfirm();
             },
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Delete'),
@@ -491,105 +487,184 @@ class _ChoresPageState extends State<ChoresPage> {
     );
   }
 
+  DateTime? _parseDate(String value) {
+    if (value.isEmpty) return null;
+
+    final parts = value.split('/');
+    if (parts.length != 3) return null;
+
+    final month = int.tryParse(parts[0]);
+    final day = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+
+    if (month == null || day == null || year == null) return null;
+
+    return DateTime(year, month, day);
+  }
+
+  String _weekLabel() {
+    final now = DateTime.now();
+    final weekStart = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+
+    return 'Week of ${_monthName(weekStart.month)} ${weekStart.day}';
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+
+    return months[month - 1];
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.tan,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        onPressed: () => _showAddChoreDialog(context),
-        child: const Icon(Icons.add),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _ChoresHeader(),
-              const SizedBox(height: 28),
-              const Center(
-                child: Text(
-                  'Week of March 23',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.text,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+    if (_loadingHousehold) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    return StreamBuilder<List<ChoreItem>>(
+      stream: _choresStream(),
+      builder: (context, snapshot) {
+        final chores = snapshot.data ?? [];
+
+        final todoChores = chores.where((chore) => !chore.completed).toList();
+        final completedChores = chores
+            .where((chore) => chore.completed)
+            .toList();
+
+        final totalChores = chores.length;
+        final completedCount = completedChores.length;
+        final completedPercent = totalChores == 0
+            ? 0
+            : ((completedCount / totalChores) * 100).round();
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          floatingActionButton: FloatingActionButton(
+            backgroundColor: AppColors.tan,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            onPressed: () => _showAddChoreDialog(context),
+            child: const Icon(Icons.add),
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '$completedPercent%',
-                    style: const TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.text,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 5),
+                  const _ChoresHeader(),
+                  const SizedBox(height: 28),
+                  Center(
                     child: Text(
-                      'of chores done',
-                      style: TextStyle(fontSize: 15, color: AppColors.text),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              _ProgressBar(
-                progress: totalChores == 0 ? 0 : completedCount / totalChores,
-              ),
-              const SizedBox(height: 26),
-              _SectionHeader(
-                title: 'To-Do',
-                expanded: todoExpanded,
-                onTap: () => setState(() => todoExpanded = !todoExpanded),
-              ),
-              const SizedBox(height: 12),
-              if (todoExpanded) ...[
-                if (todoChores.isEmpty)
-                  const _EmptyStateCard(text: 'No chores left. Nice work.')
-                else
-                  ...todoChores.map(
-                    (chore) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _TodoChoreTile(
-                        title: chore.name,
-                        onTap: () => _showChoreOverlay(chore),
+                      _weekLabel(),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
                       ),
                     ),
                   ),
-              ],
-              const SizedBox(height: 24),
-              _SectionHeader(
-                title: 'Completed',
-                expanded: completedExpanded,
-                onTap: () =>
-                    setState(() => completedExpanded = !completedExpanded),
-              ),
-              const SizedBox(height: 12),
-              if (completedExpanded)
-                ...completedChores.map(
-                  (chore) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _CompletedChoreTile(
-                      title: chore.name,
-                      time: chore.completedAt,
-                      onTap: () => _showCompletedChoreOverlay(chore),
-                    ),
+                  const SizedBox(height: 18),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '$completedPercent%',
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.text,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 5),
+                        child: Text(
+                          'of chores done',
+                          style: TextStyle(fontSize: 15, color: AppColors.text),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-            ],
+                  const SizedBox(height: 8),
+                  _ProgressBar(
+                    progress: totalChores == 0
+                        ? 0
+                        : completedCount / totalChores,
+                  ),
+                  const SizedBox(height: 26),
+                  _SectionHeader(
+                    title: 'To-Do',
+                    expanded: todoExpanded,
+                    onTap: () => setState(() => todoExpanded = !todoExpanded),
+                  ),
+                  const SizedBox(height: 12),
+                  if (todoExpanded) ...[
+                    if (todoChores.isEmpty)
+                      const _EmptyStateCard(text: 'No chores left. Nice work.')
+                    else
+                      ...todoChores.map(
+                        (chore) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _TodoChoreTile(
+                            title: chore.name,
+                            onTap: () => _showChoreOverlay(chore),
+                          ),
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 24),
+                  _SectionHeader(
+                    title: 'Completed',
+                    expanded: completedExpanded,
+                    onTap: () {
+                      setState(() {
+                        completedExpanded = !completedExpanded;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (completedExpanded) ...[
+                    if (completedChores.isEmpty)
+                      const _EmptyStateCard(text: 'No completed chores yet.')
+                    else
+                      ...completedChores.map(
+                        (chore) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _CompletedChoreTile(
+                            title: chore.name,
+                            time: chore.completedAtText,
+                            onTap: () => _showCompletedChoreOverlay(chore),
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -846,7 +921,7 @@ class _ChoreOverlay extends StatelessWidget {
 }
 
 class _CompletedChoreOverlay extends StatelessWidget {
-  final CompletedChoreItem chore;
+  final ChoreItem chore;
   final VoidCallback onUndo;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
@@ -908,7 +983,7 @@ class _CompletedChoreOverlay extends StatelessWidget {
               dark: true,
             ),
             _OverlayField('Roommate:', chore.roommate, dark: true),
-            _OverlayField('Completed:', chore.completedAt, dark: true),
+            _OverlayField('Completed:', chore.completedAtText, dark: true),
           ],
         ),
       ),
@@ -926,6 +1001,7 @@ class _OverlayField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = dark ? AppColors.text : Colors.white;
+
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: RichText(
@@ -945,33 +1021,84 @@ class _OverlayField extends StatelessWidget {
 }
 
 class ChoreItem {
+  final String id;
   final String name;
   final String description;
-  final String deadline;
+  final DateTime? dueDate;
   final String estimatedTime;
+  final String? assignedTo;
   final String roommate;
   final bool recurring;
+  final bool completed;
+  final DateTime? completedAt;
 
   ChoreItem({
+    required this.id,
     required this.name,
     required this.description,
-    required this.deadline,
+    required this.dueDate,
     required this.estimatedTime,
+    required this.assignedTo,
     required this.roommate,
     required this.recurring,
-  });
-}
-
-class CompletedChoreItem extends ChoreItem {
-  final String completedAt;
-
-  CompletedChoreItem({
-    required super.name,
-    required super.description,
-    required super.deadline,
-    required super.estimatedTime,
-    required super.roommate,
-    required super.recurring,
+    required this.completed,
     required this.completedAt,
   });
+
+  factory ChoreItem.fromFirestore(String id, Map<String, dynamic> data) {
+    return ChoreItem(
+      id: id,
+      name: data['name'] ?? 'Untitled Chore',
+      description: data['description'] ?? 'No description added.',
+      dueDate: _readDate(data['dueDate']),
+      estimatedTime: data['estimatedTime'] ?? 'Not set',
+      assignedTo: data['assignedTo'],
+      roommate: data['assignedToName'] ?? 'Unassigned',
+      recurring: data['recurring'] == true,
+      completed: data['completed'] == true,
+      completedAt: _readDate(data['completedAt']),
+    );
+  }
+
+  String get deadline {
+    if (dueDate == null) return 'No deadline';
+    return '${dueDate!.month}/${dueDate!.day}/${dueDate!.year}';
+  }
+
+  String get completedAtText {
+    if (completedAt == null) return '';
+
+    final month = completedAt!.month;
+    final day = completedAt!.day;
+    final year = completedAt!.year;
+
+    var hour = completedAt!.hour;
+    final minute = completedAt!.minute.toString().padLeft(2, '0');
+    final suffix = hour >= 12 ? 'pm' : 'am';
+
+    hour = hour % 12;
+    if (hour == 0) hour = 12;
+
+    return '$month/$day/$year, $hour:$minute$suffix';
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+}
+
+class HouseholdMember {
+  final String uid;
+  final String name;
+
+  const HouseholdMember({required this.uid, required this.name});
+}
+
+extension FirstOrNullExtension<T> on Iterable<T> {
+  T? get firstOrNull {
+    if (isEmpty) return null;
+    return first;
+  }
 }
