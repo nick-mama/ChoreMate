@@ -15,6 +15,7 @@ class _ChoresPageState extends State<ChoresPage> {
   final _db = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
 
+  bool overdueExpanded = true;
   bool todoExpanded = true;
   bool completedExpanded = true;
   bool _loadingHousehold = true;
@@ -532,6 +533,17 @@ class _ChoresPageState extends State<ChoresPage> {
     return months[month - 1];
   }
 
+  bool _isOverdue(ChoreItem chore) {
+    if (chore.completed || chore.dueDate == null) return false;
+
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final dueDate = chore.dueDate!;
+    final dueDateStart = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+    return dueDateStart.isBefore(todayStart);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loadingHousehold) {
@@ -546,7 +558,12 @@ class _ChoresPageState extends State<ChoresPage> {
       builder: (context, snapshot) {
         final chores = snapshot.data ?? [];
 
-        final todoChores = chores.where((chore) => !chore.completed).toList();
+        final overdueChores = chores.where(_isOverdue).toList();
+
+        final todoChores = chores.where((chore) {
+          return !chore.completed && !_isOverdue(chore);
+        }).toList();
+
         final completedChores = chores
             .where((chore) => chore.completed)
             .toList();
@@ -613,6 +630,31 @@ class _ChoresPageState extends State<ChoresPage> {
                         : completedCount / totalChores,
                   ),
                   const SizedBox(height: 26),
+                  _SectionHeader(
+                    title: 'Overdue',
+                    expanded: overdueExpanded,
+                    onTap: () {
+                      setState(() {
+                        overdueExpanded = !overdueExpanded;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (overdueExpanded) ...[
+                    if (overdueChores.isEmpty)
+                      const _EmptyStateCard(text: 'No overdue chores.')
+                    else
+                      ...overdueChores.map(
+                        (chore) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _TodoChoreTile(
+                            title: chore.name,
+                            onTap: () => _showChoreOverlay(chore),
+                          ),
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 24),
                   _SectionHeader(
                     title: 'To-Do',
                     expanded: todoExpanded,
@@ -692,6 +734,7 @@ class _ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clamped = progress.clamp(0.0, 1.0);
+
     return Container(
       height: 12,
       width: double.infinity,

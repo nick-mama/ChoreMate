@@ -17,12 +17,45 @@ class _HouseholdPageState extends State<HouseholdPage> {
 
   String _householdName = '';
   bool _loading = true;
+  bool overdueExpanded = true;
+  bool todoExpanded = true;
+  bool completedExpanded = true;
 
   List<Housemate> housemates = [
     const Housemate(firstName: 'Hillary'),
     const Housemate(firstName: 'Garrett'),
     const Housemate(firstName: 'Geoffrey'),
     const Housemate(firstName: 'Nick'),
+  ];
+
+  final List<HouseholdActivity> overdueActivities = [
+    const HouseholdActivity(
+      title: 'Kitchen Counters',
+      timestamp: '3/18/2026',
+      details: 'Assigned to Hillary',
+      completedBy: 'Hillary',
+    ),
+    const HouseholdActivity(
+      title: 'Take Out Trash',
+      timestamp: '3/19/2026',
+      details: 'Assigned to Geoffrey',
+      completedBy: 'Geoffrey',
+    ),
+  ];
+
+  final List<HouseholdActivity> todoActivities = [
+    const HouseholdActivity(
+      title: 'Vacuum Living Room',
+      timestamp: '3/24/2026',
+      details: 'Assigned to Nick',
+      completedBy: 'Nick',
+    ),
+    const HouseholdActivity(
+      title: 'Clean Bathroom',
+      timestamp: '3/25/2026',
+      details: 'Assigned to Garrett',
+      completedBy: 'Garrett',
+    ),
   ];
 
   final List<HouseholdActivity> activities = [
@@ -238,24 +271,100 @@ class _HouseholdPageState extends State<HouseholdPage> {
               ),
               const SizedBox(height: 34),
               const Text(
-                'Completed Chores',
+                'Household Chores',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 14),
-              ...activities.map(
-                (activity) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _HouseholdActivityTile(
-                    title: activity.title,
-                    timestamp: activity.timestamp,
-                    onTap: () => _showActivityOverlay(activity),
-                  ),
-                ),
+              const SizedBox(height: 18),
+              _ChoreSectionHeader(
+                title: 'Overdue',
+                expanded: overdueExpanded,
+                onTap: () {
+                  setState(() {
+                    overdueExpanded = !overdueExpanded;
+                  });
+                },
               ),
+              const SizedBox(height: 12),
+              if (overdueExpanded) ...[
+                if (overdueActivities.isEmpty)
+                  const _EmptyStateCard(text: 'No overdue chores.')
+                else
+                  ...overdueActivities.map(
+                    (activity) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _HouseholdActivityTile(
+                        title: activity.title,
+                        timestamp: activity.timestamp,
+                        color: AppColors.blue,
+                        textColor: Colors.white,
+                        timestampColor: Colors.white,
+                        onTap: () => _showActivityOverlay(activity),
+                      ),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 24),
+              _ChoreSectionHeader(
+                title: 'To-Do',
+                expanded: todoExpanded,
+                onTap: () {
+                  setState(() {
+                    todoExpanded = !todoExpanded;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              if (todoExpanded) ...[
+                if (todoActivities.isEmpty)
+                  const _EmptyStateCard(text: 'No chores left. Nice work.')
+                else
+                  ...todoActivities.map(
+                    (activity) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _HouseholdActivityTile(
+                        title: activity.title,
+                        timestamp: activity.timestamp,
+                        color: AppColors.blue,
+                        textColor: Colors.white,
+                        timestampColor: Colors.white,
+                        onTap: () => _showActivityOverlay(activity),
+                      ),
+                    ),
+                  ),
+              ],
+              const SizedBox(height: 24),
+              _ChoreSectionHeader(
+                title: 'Completed',
+                expanded: completedExpanded,
+                onTap: () {
+                  setState(() {
+                    completedExpanded = !completedExpanded;
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
+              if (completedExpanded) ...[
+                if (activities.isEmpty)
+                  const _EmptyStateCard(text: 'No completed chores yet.')
+                else
+                  ...activities.map(
+                    (activity) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: _HouseholdActivityTile(
+                        title: activity.title,
+                        timestamp: activity.timestamp,
+                        color: AppColors.field,
+                        textColor: AppColors.text,
+                        timestampColor: AppColors.muted,
+                        onTap: () => _showActivityOverlay(activity),
+                      ),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
@@ -279,6 +388,45 @@ class _HouseholdHeader extends StatelessWidget {
         ),
         Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.text),
       ],
+    );
+  }
+}
+
+class _ChoreSectionHeader extends StatelessWidget {
+  final String title;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  const _ChoreSectionHeader({
+    required this.title,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+              color: AppColors.muted,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(
+            expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+            color: AppColors.muted,
+            size: 22,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -322,18 +470,24 @@ class _HousemateCard extends StatelessWidget {
 class _HouseholdActivityTile extends StatelessWidget {
   final String title;
   final String timestamp;
+  final Color color;
+  final Color textColor;
+  final Color timestampColor;
   final VoidCallback onTap;
 
   const _HouseholdActivityTile({
     required this.title,
     required this.timestamp,
+    required this.color,
+    required this.textColor,
+    required this.timestampColor,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.field,
+      color: color,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -345,20 +499,42 @@ class _HouseholdActivityTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 17,
-                    color: AppColors.text,
+                    color: textColor,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
               Text(
                 timestamp,
-                style: const TextStyle(fontSize: 14, color: AppColors.muted),
+                style: TextStyle(fontSize: 14, color: timestampColor),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyStateCard extends StatelessWidget {
+  final String text;
+
+  const _EmptyStateCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.field,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 16, color: AppColors.muted),
       ),
     );
   }
@@ -404,7 +580,7 @@ class _ActivityOverlay extends StatelessWidget {
             const SizedBox(height: 10),
             _OverlayField('Status:', activity.details),
             _OverlayField('Created:', activity.createdAt),
-            _OverlayField('Completed:', activity.timestamp),
+            _OverlayField('Date:', activity.timestamp),
           ],
         ),
       ),
@@ -525,7 +701,7 @@ class HousemateProfilePage extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               if (activities.isEmpty)
-                Text(
+                const Text(
                   'No chores recorded yet.',
                   style: TextStyle(fontSize: 15, color: AppColors.muted),
                 )
@@ -696,9 +872,7 @@ class _PrivacyBadgeButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        onPressed: () {
-          // TODO: wire up privacy setting
-        },
+        onPressed: () {},
         icon: const Icon(Icons.lock_outline, size: 18),
         label: const Text(
           'Public',
@@ -866,9 +1040,13 @@ class _HousemateBarChartCard extends StatelessWidget {
     );
   }
 
-  Widget _buildGridLine() =>
-      Container(height: 2, color: const Color(0xFFA9A9A9));
-  Widget _buildAxisLine() => Container(height: 2, color: AppColors.tan);
+  Widget _buildGridLine() {
+    return Container(height: 2, color: const Color(0xFFA9A9A9));
+  }
+
+  Widget _buildAxisLine() {
+    return Container(height: 2, color: AppColors.tan);
+  }
 }
 
 class _HousemateStatsGrid extends StatelessWidget {
@@ -903,6 +1081,7 @@ class _HousemateStatsGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final stat = stats[index];
+
         return Container(
           decoration: BoxDecoration(
             color: AppColors.cream,
