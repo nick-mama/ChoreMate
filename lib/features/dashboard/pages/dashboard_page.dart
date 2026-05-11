@@ -311,7 +311,7 @@ class _DashboardHeader extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
-            child: AppLogo(type: LogoType.wordmark, width: 240),
+            child: AppLogo(type: LogoType.wordmark, width: 230),
           ),
         ),
         Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.blue),

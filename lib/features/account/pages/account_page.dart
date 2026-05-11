@@ -77,7 +77,12 @@ class _AccountPageState extends State<AccountPage> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            28 + MediaQuery.of(context).padding.bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -192,12 +197,17 @@ class _ProfileSection extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    displayName.isNotEmpty ? displayName : 'Name',
-                    style: const TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.text,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      displayName.isNotEmpty ? displayName : 'Name',
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
                     ),
                   ),
                   Text(
@@ -473,7 +483,7 @@ class _StatsGrid extends StatelessWidget {
       _StatItem(value: '20', label: 'Total Chores'),
       _StatItem(value: '8', label: 'Unique Chores'),
       _StatItem(value: '10.5', label: 'Hours of Chores'),
-      _StatItem(value: '4 weeks', label: 'Chore Streak'),
+      _StatItem(value: '4', valueSuffix: '\nweeks', label: 'Chore Streak'),
     ];
 
     return GridView.builder(
@@ -484,7 +494,7 @@ class _StatsGrid extends StatelessWidget {
         crossAxisCount: 3,
         mainAxisSpacing: 10,
         crossAxisSpacing: 10,
-        childAspectRatio: 1.1,
+        childAspectRatio: 0.95,
       ),
       itemBuilder: (context, index) {
         final stat = stats[index];
@@ -497,13 +507,28 @@ class _StatsGrid extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                stat.value,
+              RichText(
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: stat.value,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    if (stat.valueSuffix != null)
+                      TextSpan(
+                        text: ' ${stat.valueSuffix}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.text,
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
@@ -523,6 +548,7 @@ class _StatsGrid extends StatelessWidget {
 class _StatItem {
   final String value;
   final String label;
+  final String? valueSuffix;
 
-  const _StatItem({required this.value, required this.label});
+  const _StatItem({required this.value, required this.label, this.valueSuffix});
 }
