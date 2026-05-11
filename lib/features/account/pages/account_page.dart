@@ -23,6 +23,12 @@ class _AccountPageState extends State<AccountPage> {
   String _username = '';
   String _householdName = '';
 
+  int _housemates = 0;
+  int _choresDone = 0;
+  int _totalChores = 0;
+  int _uniqueChores = 0;
+  int _choreStreak = 0;
+
   List<double> individualValues = [0, 0, 0, 0];
   List<double> householdValues = [0, 0, 0, 0];
   List<String> weekLabels = ['', '', '', ''];
@@ -57,69 +63,111 @@ class _AccountPageState extends State<AccountPage> {
     final householdId = data['householdId'] ?? '';
 
     String householdName = '';
+
     if (householdId.isNotEmpty) {
       final householdDoc = await FirebaseFirestore.instance
           .collection('households')
           .doc(householdId)
           .get(const GetOptions(source: Source.server));
+
       householdName = householdDoc.data()?['name'] ?? '';
     }
 
-    final chartData = await _loadChartData(user.uid, householdId);
+    final accountData = await _loadAccountData(user.uid, householdId);
 
     if (!mounted) return;
     setState(() {
       _displayName = '$firstName $lastName'.trim();
       _username = username;
       _householdName = householdName;
-      individualValues = chartData.individualValues;
-      householdValues = chartData.householdValues;
-      weekLabels = chartData.weekLabels;
+
+      individualValues = accountData.individualValues;
+      householdValues = accountData.householdValues;
+      weekLabels = accountData.weekLabels;
+
+      _housemates = accountData.housemates;
+      _choresDone = accountData.choresDone;
+      _totalChores = accountData.totalChores;
+      _uniqueChores = accountData.uniqueChores;
+      _choreStreak = accountData.choreStreak;
+
       _loading = false;
     });
   }
 
-  Future<_ChartData> _loadChartData(String uid, String householdId) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
-    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
-    final lastWeekEnd = currentWeekStart.add(const Duration(days: 7));
-
-    final labels = List.generate(4, (index) {
-      final weekStart = firstWeekStart.add(Duration(days: index * 7));
-      return '${_shortMonthName(weekStart.month)} ${weekStart.day}';
-    });
-
-    final individualCounts = List<double>.filled(4, 0);
-    final householdCounts = List<double>.filled(4, 0);
+  Future<_AccountData> _loadAccountData(String uid, String householdId) async {
+    final chartData = _emptyChartData();
 
     if (householdId.isEmpty) {
-      return _ChartData(
-        individualValues: individualCounts,
-        householdValues: householdCounts,
-        weekLabels: labels,
-      );
+      return _AccountData.fromChartData(chartData);
     }
+
+    final usersSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('householdId', isEqualTo: householdId)
+        .get(const GetOptions(source: Source.server));
 
     final choresSnapshot = await FirebaseFirestore.instance
         .collection('chores')
         .where('householdId', isEqualTo: householdId)
         .get(const GetOptions(source: Source.server));
 
+    final housemates = (usersSnapshot.docs.length - 1).clamp(0, 999999);
+    final totalChores = choresSnapshot.docs.length;
+
+    final uniqueNames = <String>{};
+    final completedWeeks = <DateTime>{};
+
+    var choresDone = 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
+    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
+    final lastWeekEnd = currentWeekStart.add(const Duration(days: 7));
+
+    final individualCounts = List<double>.filled(4, 0);
+    final householdCounts = List<double>.filled(4, 0);
+
     for (final doc in choresSnapshot.docs) {
       final data = doc.data();
 
+      final name = (data['name'] ?? '').toString().trim().toLowerCase();
+      if (name.isNotEmpty) {
+        uniqueNames.add(name);
+      }
+
       if (data['completed'] != true) continue;
+
+      choresDone += 1;
 
       final completedAt = _readDate(data['completedAt']);
       if (completedAt == null) continue;
-      if (completedAt.isBefore(firstWeekStart) ||
-          !completedAt.isBefore(lastWeekEnd)) {
+
+      final completedDate = DateTime(
+        completedAt.year,
+        completedAt.month,
+        completedAt.day,
+      );
+
+      final streakWeekStart = completedDate.subtract(
+        Duration(days: completedDate.weekday % 7),
+      );
+
+      completedWeeks.add(
+        DateTime(
+          streakWeekStart.year,
+          streakWeekStart.month,
+          streakWeekStart.day,
+        ),
+      );
+
+      if (completedDate.isBefore(firstWeekStart) ||
+          !completedDate.isBefore(lastWeekEnd)) {
         continue;
       }
 
-      final weekIndex = completedAt.difference(firstWeekStart).inDays ~/ 7;
+      final weekIndex = completedDate.difference(firstWeekStart).inDays ~/ 7;
       if (weekIndex < 0 || weekIndex > 3) continue;
 
       householdCounts[weekIndex] += 1;
@@ -129,9 +177,32 @@ class _AccountPageState extends State<AccountPage> {
       }
     }
 
-    return _ChartData(
+    return _AccountData(
       individualValues: individualCounts,
       householdValues: householdCounts,
+      weekLabels: chartData.weekLabels,
+      housemates: housemates,
+      choresDone: choresDone,
+      totalChores: totalChores,
+      uniqueChores: uniqueNames.length,
+      choreStreak: completedWeeks.length,
+    );
+  }
+
+  _ChartData _emptyChartData() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
+    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
+
+    final labels = List.generate(4, (index) {
+      final weekStart = firstWeekStart.add(Duration(days: index * 7));
+      return '${_shortMonthName(weekStart.month)} ${weekStart.day}';
+    });
+
+    return _ChartData(
+      individualValues: List<double>.filled(4, 0),
+      householdValues: List<double>.filled(4, 0),
       weekLabels: labels,
     );
   }
@@ -253,7 +324,13 @@ class _AccountPageState extends State<AccountPage> {
                 ),
               ),
               const SizedBox(height: 14),
-              const _StatsGrid(),
+              _StatsGrid(
+                housemates: _housemates,
+                choresDone: _choresDone,
+                totalChores: _totalChores,
+                uniqueChores: _uniqueChores,
+                choreStreak: _choreStreak,
+              ),
             ],
           ),
         ),
@@ -283,6 +360,42 @@ class _ChartData {
     required this.householdValues,
     required this.weekLabels,
   });
+}
+
+class _AccountData {
+  final List<double> individualValues;
+  final List<double> householdValues;
+  final List<String> weekLabels;
+
+  final int housemates;
+  final int choresDone;
+  final int totalChores;
+  final int uniqueChores;
+  final int choreStreak;
+
+  const _AccountData({
+    required this.individualValues,
+    required this.householdValues,
+    required this.weekLabels,
+    required this.housemates,
+    required this.choresDone,
+    required this.totalChores,
+    required this.uniqueChores,
+    required this.choreStreak,
+  });
+
+  factory _AccountData.fromChartData(_ChartData chartData) {
+    return _AccountData(
+      individualValues: chartData.individualValues,
+      householdValues: chartData.householdValues,
+      weekLabels: chartData.weekLabels,
+      housemates: 0,
+      choresDone: 0,
+      totalChores: 0,
+      uniqueChores: 0,
+      choreStreak: 0,
+    );
+  }
 }
 
 class _ChartPage extends StatelessWidget {
@@ -663,17 +776,33 @@ class _BarChartCard extends StatelessWidget {
 }
 
 class _StatsGrid extends StatelessWidget {
-  const _StatsGrid();
+  final int housemates;
+  final int choresDone;
+  final int totalChores;
+  final int uniqueChores;
+  final int choreStreak;
+
+  const _StatsGrid({
+    required this.housemates,
+    required this.choresDone,
+    required this.totalChores,
+    required this.uniqueChores,
+    required this.choreStreak,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final stats = const [
-      _StatItem(value: '3', label: 'Roommates'),
-      _StatItem(value: '17', label: 'Chores Done'),
-      _StatItem(value: '20', label: 'Total Chores'),
-      _StatItem(value: '8', label: 'Unique Chores'),
-      _StatItem(value: '10.5', label: 'Hours of Chores'),
-      _StatItem(value: '4', valueSuffix: '\nweeks', label: 'Chore Streak'),
+    final stats = [
+      _StatItem(value: '$housemates', label: 'Housemates'),
+      _StatItem(value: '$choresDone', label: 'Chores Done'),
+      _StatItem(value: '$totalChores', label: 'Total Chores'),
+      _StatItem(value: '$uniqueChores', label: 'Unique Chores'),
+      _StatItem(
+        value: '$choreStreak',
+        valueSuffix: '\nweeks',
+        label: 'Chore Streak',
+      ),
+      const _StatItem(value: '', label: '', isPlaceholder: true),
     ];
 
     return GridView.builder(
@@ -691,45 +820,52 @@ class _StatsGrid extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.cream,
+            color: stat.isPlaceholder
+                ? const Color(0xFFD9D9D9)
+                : AppColors.cream,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
+          child: stat.isPlaceholder
+              ? const SizedBox.expand()
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    TextSpan(
-                      text: stat.value,
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: stat.value,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
+                          ),
+                          if (stat.valueSuffix != null)
+                            TextSpan(
+                              text: ' ${stat.valueSuffix}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.text,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      stat.label,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                         color: AppColors.text,
                       ),
                     ),
-                    if (stat.valueSuffix != null)
-                      TextSpan(
-                        text: ' ${stat.valueSuffix}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.text,
-                        ),
-                      ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                stat.label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.text),
-              ),
-            ],
-          ),
         );
       },
     );
@@ -740,6 +876,12 @@ class _StatItem {
   final String value;
   final String label;
   final String? valueSuffix;
+  final bool isPlaceholder;
 
-  const _StatItem({required this.value, required this.label, this.valueSuffix});
+  const _StatItem({
+    required this.value,
+    required this.label,
+    this.valueSuffix,
+    this.isPlaceholder = false,
+  });
 }
