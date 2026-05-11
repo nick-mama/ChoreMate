@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../features/auth/pages/login_page.dart';
 import '../features/auth/pages/signup_page.dart';
 import '../features/auth/pages/splash_page.dart';
-import '../features/auth/pages/verify_code_page.dart';
+import '../features/auth/pages/verify_email_page.dart';
 import '../features/household/pages/household_setup_page.dart';
 import '../shared/widgets/main_shell.dart';
 
@@ -41,7 +41,7 @@ class AppRouter {
       case signup:
         return MaterialPageRoute(builder: (_) => const SignupPage());
       case verify:
-        return MaterialPageRoute(builder: (_) => const VerifyCodePage());
+        return MaterialPageRoute(builder: (_) => const VerifyEmailPage());
       case householdSetup:
         return MaterialPageRoute(builder: (_) => const HouseholdSetupPage());
       case shell:
