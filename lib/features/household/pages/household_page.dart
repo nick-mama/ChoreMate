@@ -250,162 +250,176 @@ class _HouseholdPageState extends State<HouseholdPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            28 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _HouseholdHeader(),
-              const SizedBox(height: 28),
-              const Text(
-                'Housemates',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: _HouseholdHeader(),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  18,
+                  20,
+                  28 + MediaQuery.of(context).padding.bottom,
                 ),
-              ),
-              if (_householdName.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _householdName,
-                  style: const TextStyle(fontSize: 16, color: AppColors.muted),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.cream,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: ScrollConfiguration(
-                  behavior: const _WebFriendlyScrollBehavior(),
-                  child: SizedBox(
-                    height: 160,
-                    child: Scrollbar(
-                      controller: _housematesScrollController,
-                      thumbVisibility: true,
-                      child: ListView.separated(
-                        controller: _housematesScrollController,
-                        scrollDirection: Axis.horizontal,
-                        itemCount: housemates.length,
-                        itemBuilder: (context, index) {
-                          return _HousemateCard(
-                            housemate: housemates[index],
-                            onTap: () =>
-                                _openHousemateProfile(housemates[index]),
-                          );
-                        },
-                        separatorBuilder: (_, _) => const SizedBox(width: 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Housemates',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
                       ),
                     ),
-                  ),
+                    if (_householdName.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        _householdName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: AppColors.muted,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppColors.cream,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ScrollConfiguration(
+                        behavior: const _WebFriendlyScrollBehavior(),
+                        child: SizedBox(
+                          height: 160,
+                          child: Scrollbar(
+                            controller: _housematesScrollController,
+                            thumbVisibility: true,
+                            child: ListView.separated(
+                              controller: _housematesScrollController,
+                              scrollDirection: Axis.horizontal,
+                              itemCount: housemates.length,
+                              itemBuilder: (context, index) {
+                                return _HousemateCard(
+                                  housemate: housemates[index],
+                                  onTap: () =>
+                                      _openHousemateProfile(housemates[index]),
+                                );
+                              },
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 18),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 34),
+                    const Text(
+                      'Household Chores',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _ChoreSectionHeader(
+                      title: 'Overdue',
+                      expanded: overdueExpanded,
+                      onTap: () {
+                        setState(() {
+                          overdueExpanded = !overdueExpanded;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (overdueExpanded) ...[
+                      if (overdueActivities.isEmpty)
+                        const _EmptyStateText(text: 'No overdue chores.')
+                      else
+                        ...overdueActivities.map(
+                          (activity) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _HouseholdActivityTile(
+                              title: activity.title,
+                              timestamp: activity.timestamp,
+                              color: AppColors.blue,
+                              textColor: Colors.white,
+                              timestampColor: Colors.white,
+                              onTap: () => _showActivityOverlay(activity),
+                            ),
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 24),
+                    _ChoreSectionHeader(
+                      title: 'To-Do',
+                      expanded: todoExpanded,
+                      onTap: () {
+                        setState(() {
+                          todoExpanded = !todoExpanded;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (todoExpanded) ...[
+                      if (todoActivities.isEmpty)
+                        const _EmptyStateText(
+                          text: 'No chores left. Nice work!',
+                        )
+                      else
+                        ...todoActivities.map(
+                          (activity) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _HouseholdActivityTile(
+                              title: activity.title,
+                              timestamp: activity.timestamp,
+                              color: AppColors.blue,
+                              textColor: Colors.white,
+                              timestampColor: Colors.white,
+                              onTap: () => _showActivityOverlay(activity),
+                            ),
+                          ),
+                        ),
+                    ],
+                    const SizedBox(height: 24),
+                    _ChoreSectionHeader(
+                      title: 'Completed',
+                      expanded: completedExpanded,
+                      onTap: () {
+                        setState(() {
+                          completedExpanded = !completedExpanded;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    if (completedExpanded) ...[
+                      if (completedActivities.isEmpty)
+                        const _EmptyStateText(text: 'No completed chores yet.')
+                      else
+                        ...completedActivities.map(
+                          (activity) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _HouseholdActivityTile(
+                              title: activity.title,
+                              timestamp: activity.timestamp,
+                              color: AppColors.field,
+                              textColor: AppColors.text,
+                              timestampColor: AppColors.muted,
+                              onTap: () => _showActivityOverlay(activity),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 34),
-              const Text(
-                'Household Chores',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 18),
-              _ChoreSectionHeader(
-                title: 'Overdue',
-                expanded: overdueExpanded,
-                onTap: () {
-                  setState(() {
-                    overdueExpanded = !overdueExpanded;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              if (overdueExpanded) ...[
-                if (overdueActivities.isEmpty)
-                  const _EmptyStateCard(text: 'No overdue chores.')
-                else
-                  ...overdueActivities.map(
-                    (activity) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _HouseholdActivityTile(
-                        title: activity.title,
-                        timestamp: activity.timestamp,
-                        color: AppColors.blue,
-                        textColor: Colors.white,
-                        timestampColor: Colors.white,
-                        onTap: () => _showActivityOverlay(activity),
-                      ),
-                    ),
-                  ),
-              ],
-              const SizedBox(height: 24),
-              _ChoreSectionHeader(
-                title: 'To-Do',
-                expanded: todoExpanded,
-                onTap: () {
-                  setState(() {
-                    todoExpanded = !todoExpanded;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              if (todoExpanded) ...[
-                if (todoActivities.isEmpty)
-                  const _EmptyStateCard(text: 'No chores left. Nice work.')
-                else
-                  ...todoActivities.map(
-                    (activity) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _HouseholdActivityTile(
-                        title: activity.title,
-                        timestamp: activity.timestamp,
-                        color: AppColors.blue,
-                        textColor: Colors.white,
-                        timestampColor: Colors.white,
-                        onTap: () => _showActivityOverlay(activity),
-                      ),
-                    ),
-                  ),
-              ],
-              const SizedBox(height: 24),
-              _ChoreSectionHeader(
-                title: 'Completed',
-                expanded: completedExpanded,
-                onTap: () {
-                  setState(() {
-                    completedExpanded = !completedExpanded;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              if (completedExpanded) ...[
-                if (completedActivities.isEmpty)
-                  const _EmptyStateCard(text: 'No completed chores yet.')
-                else
-                  ...completedActivities.map(
-                    (activity) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: _HouseholdActivityTile(
-                        title: activity.title,
-                        timestamp: activity.timestamp,
-                        color: AppColors.field,
-                        textColor: AppColors.text,
-                        timestampColor: AppColors.muted,
-                        onTap: () => _showActivityOverlay(activity),
-                      ),
-                    ),
-                  ),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -625,17 +639,11 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            28 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: Row(
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
@@ -652,66 +660,85 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
                       child: AppLogo(type: LogoType.wordmark, width: 200),
                     ),
                   ),
+                  const Icon(
+                    Icons.notifications_none_rounded,
+                    size: 38,
+                    color: AppColors.text,
+                  ),
                 ],
               ),
-              const SizedBox(height: 28),
-              _HousemateProfileSection(housemate: widget.housemate),
-              const SizedBox(height: 26),
-              const Text(
-                'Chores Completed',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  28,
+                  10,
+                  28 + MediaQuery.of(context).padding.bottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _HousemateProfileSection(housemate: widget.housemate),
+                    const SizedBox(height: 26),
+                    const Text(
+                      'Chores Completed',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Individual',
+                      style: TextStyle(fontSize: 16, color: AppColors.text),
+                    ),
+                    const SizedBox(height: 14),
+                    _BarChartCard(values: weeklyValues, labels: weekLabels),
+                    const SizedBox(height: 26),
+                    const Text(
+                      'Chore History',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (choreHistory.isEmpty)
+                      const Text(
+                        'No chores recorded yet.',
+                        style: TextStyle(fontSize: 15, color: AppColors.muted),
+                      )
+                    else
+                      ...choreHistory.map(
+                        (activity) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _HousemateActivityTile(activity: activity),
+                        ),
+                      ),
+                    const SizedBox(height: 26),
+                    const Text(
+                      'Account Stats',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _HousemateStatsGrid(
+                      choresDone: choresDone,
+                      totalChores: totalChores,
+                      uniqueChores: uniqueChores,
+                      choreStreak: choreStreak,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Individual',
-                style: TextStyle(fontSize: 16, color: AppColors.text),
-              ),
-              const SizedBox(height: 14),
-              _BarChartCard(values: weeklyValues, labels: weekLabels),
-              const SizedBox(height: 26),
-              const Text(
-                'Chore History',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (choreHistory.isEmpty)
-                const Text(
-                  'No chores recorded yet.',
-                  style: TextStyle(fontSize: 15, color: AppColors.muted),
-                )
-              else
-                ...choreHistory.map(
-                  (activity) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _HousemateActivityTile(activity: activity),
-                  ),
-                ),
-              const SizedBox(height: 26),
-              const Text(
-                'Account Stats',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _HousemateStatsGrid(
-                choresDone: choresDone,
-                totalChores: totalChores,
-                uniqueChores: uniqueChores,
-                choreStreak: choreStreak,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -863,10 +890,10 @@ class _HouseholdActivityTile extends StatelessWidget {
   }
 }
 
-class _EmptyStateCard extends StatelessWidget {
+class _EmptyStateText extends StatelessWidget {
   final String text;
 
-  const _EmptyStateCard({required this.text});
+  const _EmptyStateText({required this.text});
 
   @override
   Widget build(BuildContext context) {

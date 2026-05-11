@@ -71,13 +71,16 @@ class _ChoresPageState extends State<ChoresPage> {
   }
 
   Stream<List<ChoreItem>> _choresStream() {
-    if (_householdId.isEmpty) {
+    final user = _auth.currentUser;
+
+    if (_householdId.isEmpty || user == null) {
       return const Stream.empty();
     }
 
     return _db
         .collection('chores')
         .where('householdId', isEqualTo: _householdId)
+        .where('assignedTo', isEqualTo: user.uid) // ✅ filter by current user
         .snapshots()
         .map((snapshot) {
           final chores = snapshot.docs.map((doc) {
@@ -594,125 +597,142 @@ class _ChoresPageState extends State<ChoresPage> {
             child: const Icon(Icons.add),
           ),
           body: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _ChoresHeader(),
-                  const SizedBox(height: 28),
-                  Center(
-                    child: Text(
-                      _weekLabel(),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.text,
-                      ),
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 10),
+                  child: _ChoresHeader(),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Center(
+                          child: Text(
+                            _weekLabel(),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '$completedPercent%',
+                              style: const TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.text,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 5),
+                              child: Text(
+                                'of chores done',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: AppColors.text,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        _ProgressBar(
+                          progress: totalChores == 0
+                              ? 0
+                              : completedCount / totalChores,
+                        ),
+                        const SizedBox(height: 26),
+                        _SectionHeader(
+                          title: 'Overdue',
+                          expanded: overdueExpanded,
+                          onTap: () {
+                            setState(() {
+                              overdueExpanded = !overdueExpanded;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (overdueExpanded) ...[
+                          if (overdueChores.isEmpty)
+                            const _EmptyStateText(text: 'No overdue chores.')
+                          else
+                            ...overdueChores.map(
+                              (chore) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _TodoChoreTile(
+                                  title: chore.name,
+                                  onTap: () => _showChoreOverlay(chore),
+                                ),
+                              ),
+                            ),
+                        ],
+                        const SizedBox(height: 24),
+                        _SectionHeader(
+                          title: 'To-Do',
+                          expanded: todoExpanded,
+                          onTap: () =>
+                              setState(() => todoExpanded = !todoExpanded),
+                        ),
+                        const SizedBox(height: 12),
+                        if (todoExpanded) ...[
+                          if (todoChores.isEmpty)
+                            const _EmptyStateText(
+                              text: 'No chores left. Nice work!',
+                            )
+                          else
+                            ...todoChores.map(
+                              (chore) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _TodoChoreTile(
+                                  title: chore.name,
+                                  onTap: () => _showChoreOverlay(chore),
+                                ),
+                              ),
+                            ),
+                        ],
+                        const SizedBox(height: 24),
+                        _SectionHeader(
+                          title: 'Completed',
+                          expanded: completedExpanded,
+                          onTap: () {
+                            setState(() {
+                              completedExpanded = !completedExpanded;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        if (completedExpanded) ...[
+                          if (completedChores.isEmpty)
+                            const _EmptyStateText(
+                              text: 'No completed chores yet.',
+                            )
+                          else
+                            ...completedChores.map(
+                              (chore) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _CompletedChoreTile(
+                                  title: chore.name,
+                                  time: chore.completedAtText,
+                                  onTap: () =>
+                                      _showCompletedChoreOverlay(chore),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '$completedPercent%',
-                        style: const TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.text,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 5),
-                        child: Text(
-                          'of chores done',
-                          style: TextStyle(fontSize: 15, color: AppColors.text),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _ProgressBar(
-                    progress: totalChores == 0
-                        ? 0
-                        : completedCount / totalChores,
-                  ),
-                  const SizedBox(height: 26),
-                  _SectionHeader(
-                    title: 'Overdue',
-                    expanded: overdueExpanded,
-                    onTap: () {
-                      setState(() {
-                        overdueExpanded = !overdueExpanded;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  if (overdueExpanded) ...[
-                    if (overdueChores.isEmpty)
-                      const _EmptyStateCard(text: 'No overdue chores.')
-                    else
-                      ...overdueChores.map(
-                        (chore) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _TodoChoreTile(
-                            title: chore.name,
-                            onTap: () => _showChoreOverlay(chore),
-                          ),
-                        ),
-                      ),
-                  ],
-                  const SizedBox(height: 24),
-                  _SectionHeader(
-                    title: 'To-Do',
-                    expanded: todoExpanded,
-                    onTap: () => setState(() => todoExpanded = !todoExpanded),
-                  ),
-                  const SizedBox(height: 12),
-                  if (todoExpanded) ...[
-                    if (todoChores.isEmpty)
-                      const _EmptyStateCard(text: 'No chores left. Nice work.')
-                    else
-                      ...todoChores.map(
-                        (chore) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _TodoChoreTile(
-                            title: chore.name,
-                            onTap: () => _showChoreOverlay(chore),
-                          ),
-                        ),
-                      ),
-                  ],
-                  const SizedBox(height: 24),
-                  _SectionHeader(
-                    title: 'Completed',
-                    expanded: completedExpanded,
-                    onTap: () {
-                      setState(() {
-                        completedExpanded = !completedExpanded;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  if (completedExpanded) ...[
-                    if (completedChores.isEmpty)
-                      const _EmptyStateCard(text: 'No completed chores yet.')
-                    else
-                      ...completedChores.map(
-                        (chore) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _CompletedChoreTile(
-                            title: chore.name,
-                            time: chore.completedAtText,
-                            onTap: () => _showCompletedChoreOverlay(chore),
-                          ),
-                        ),
-                      ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -884,24 +904,16 @@ class _CompletedChoreTile extends StatelessWidget {
   }
 }
 
-class _EmptyStateCard extends StatelessWidget {
+class _EmptyStateText extends StatelessWidget {
   final String text;
 
-  const _EmptyStateCard({required this.text});
+  const _EmptyStateText({required this.text});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.field,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 16, color: AppColors.muted),
-      ),
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 15, color: AppColors.muted),
     );
   }
 }

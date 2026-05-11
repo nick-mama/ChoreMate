@@ -306,87 +306,95 @@ class _AccountPageState extends State<AccountPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            28 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _AccountHeader(),
-              const SizedBox(height: 28),
-              _ProfileSection(
-                displayName: _displayName,
-                username: _username,
-                householdName: _householdName,
-                onSettings: _openSettings,
-                onShare: _shareChoreMate,
-                onSignOut: _signOut,
-              ),
-              const SizedBox(height: 26),
-              const Text(
-                'Chores Completed',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: _AccountHeader(),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  18,
+                  20,
+                  28 + MediaQuery.of(context).padding.bottom,
                 ),
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 340,
-                child: PageView(
-                  controller: _chartController,
-                  onPageChanged: (index) {
-                    setState(() => _chartIndex = index);
-                  },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _ChartPage(
-                      title: 'Individual',
-                      values: individualValues,
-                      labels: weekLabels,
+                    _ProfileSection(
+                      displayName: _displayName,
+                      username: _username,
+                      householdName: _householdName,
+                      onSettings: _openSettings,
+                      onShare: _shareChoreMate,
+                      onSignOut: _signOut,
                     ),
-                    _ChartPage(
-                      title: 'Household',
-                      values: householdValues,
-                      labels: weekLabels,
+                    const SizedBox(height: 26),
+                    const Text(
+                      'Chores Completed',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      height: 340,
+                      child: PageView(
+                        controller: _chartController,
+                        onPageChanged: (index) {
+                          setState(() => _chartIndex = index);
+                        },
+                        children: [
+                          _ChartPage(
+                            title: 'Individual',
+                            values: individualValues,
+                            labels: weekLabels,
+                          ),
+                          _ChartPage(
+                            title: 'Household',
+                            values: householdValues,
+                            labels: weekLabels,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildDot(active: _chartIndex == 0),
+                          const SizedBox(width: 6),
+                          _buildDot(active: _chartIndex == 1),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Account Stats',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.text,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _StatsGrid(
+                      housemates: _housemates,
+                      choresDone: _choresDone,
+                      totalChores: _totalChores,
+                      uniqueChores: _uniqueChores,
+                      choreStreak: _choreStreak,
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildDot(active: _chartIndex == 0),
-                    const SizedBox(width: 6),
-                    _buildDot(active: _chartIndex == 1),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Account Stats',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _StatsGrid(
-                housemates: _housemates,
-                choresDone: _choresDone,
-                totalChores: _totalChores,
-                uniqueChores: _uniqueChores,
-                choreStreak: _choreStreak,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -289,30 +289,38 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _DashboardHeader(),
-              const SizedBox(height: 20),
-              DashboardSummaryCard(
-                title: _displayName,
-                weekLabel: weekLabel,
-                centerPercent: _personalCompletionPercent(),
-                items: _personalItems,
-                rightColumnTitle: 'Status',
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 10),
+              child: _DashboardHeader(),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DashboardSummaryCard(
+                      title: _displayName,
+                      weekLabel: weekLabel,
+                      centerPercent: _personalCompletionPercent(),
+                      items: _personalItems,
+                      rightColumnTitle: 'Status',
+                    ),
+                    const SizedBox(height: 22),
+                    DashboardSummaryCard(
+                      title: _householdName,
+                      weekLabel: weekLabel,
+                      centerPercent: _householdCompletedPercent,
+                      items: _householdItems,
+                      rightColumnTitle: 'Mate',
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 22),
-              DashboardSummaryCard(
-                title: _householdName,
-                weekLabel: weekLabel,
-                centerPercent: _householdCompletedPercent,
-                items: _householdItems,
-                rightColumnTitle: 'Mate',
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
