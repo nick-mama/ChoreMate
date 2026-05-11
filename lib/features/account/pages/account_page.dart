@@ -14,18 +14,29 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  final List<double> weeklyValues = [2, 4, 5, 3];
-  final List<String> weekLabels = ['Mar 2', 'Mar 9', 'Mar 16', 'Mar 23'];
+  final PageController _chartController = PageController();
 
   bool _loading = true;
+  int _chartIndex = 0;
+
   String _displayName = '';
   String _username = '';
   String _householdName = '';
+
+  List<double> individualValues = [0, 0, 0, 0];
+  List<double> householdValues = [0, 0, 0, 0];
+  List<String> weekLabels = ['', '', '', ''];
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+  }
+
+  @override
+  void dispose() {
+    _chartController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserData() async {
@@ -54,13 +65,100 @@ class _AccountPageState extends State<AccountPage> {
       householdName = householdDoc.data()?['name'] ?? '';
     }
 
+    final chartData = await _loadChartData(user.uid, householdId);
+
     if (!mounted) return;
     setState(() {
       _displayName = '$firstName $lastName'.trim();
       _username = username;
       _householdName = householdName;
+      individualValues = chartData.individualValues;
+      householdValues = chartData.householdValues;
+      weekLabels = chartData.weekLabels;
       _loading = false;
     });
+  }
+
+  Future<_ChartData> _loadChartData(String uid, String householdId) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
+    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
+    final lastWeekEnd = currentWeekStart.add(const Duration(days: 7));
+
+    final labels = List.generate(4, (index) {
+      final weekStart = firstWeekStart.add(Duration(days: index * 7));
+      return '${_shortMonthName(weekStart.month)} ${weekStart.day}';
+    });
+
+    final individualCounts = List<double>.filled(4, 0);
+    final householdCounts = List<double>.filled(4, 0);
+
+    if (householdId.isEmpty) {
+      return _ChartData(
+        individualValues: individualCounts,
+        householdValues: householdCounts,
+        weekLabels: labels,
+      );
+    }
+
+    final choresSnapshot = await FirebaseFirestore.instance
+        .collection('chores')
+        .where('householdId', isEqualTo: householdId)
+        .get(const GetOptions(source: Source.server));
+
+    for (final doc in choresSnapshot.docs) {
+      final data = doc.data();
+
+      if (data['completed'] != true) continue;
+
+      final completedAt = _readDate(data['completedAt']);
+      if (completedAt == null) continue;
+      if (completedAt.isBefore(firstWeekStart) ||
+          !completedAt.isBefore(lastWeekEnd)) {
+        continue;
+      }
+
+      final weekIndex = completedAt.difference(firstWeekStart).inDays ~/ 7;
+      if (weekIndex < 0 || weekIndex > 3) continue;
+
+      householdCounts[weekIndex] += 1;
+
+      if (data['assignedTo'] == uid) {
+        individualCounts[weekIndex] += 1;
+      }
+    }
+
+    return _ChartData(
+      individualValues: individualCounts,
+      householdValues: householdCounts,
+      weekLabels: labels,
+    );
+  }
+
+  DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  String _shortMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return months[month - 1];
   }
 
   Future<void> _signOut() async {
@@ -112,21 +210,36 @@ class _AccountPageState extends State<AccountPage> {
                   color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Individual',
-                style: TextStyle(fontSize: 16, color: AppColors.text),
-              ),
               const SizedBox(height: 14),
-              _BarChartCard(values: weeklyValues, labels: weekLabels),
+              SizedBox(
+                height: 340,
+                child: PageView(
+                  controller: _chartController,
+                  onPageChanged: (index) {
+                    setState(() => _chartIndex = index);
+                  },
+                  children: [
+                    _ChartPage(
+                      title: 'Individual',
+                      values: individualValues,
+                      labels: weekLabels,
+                    ),
+                    _ChartPage(
+                      title: 'Household',
+                      values: householdValues,
+                      labels: weekLabels,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 10),
               Center(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildDot(active: true),
+                    _buildDot(active: _chartIndex == 0),
                     const SizedBox(width: 6),
-                    _buildDot(active: false),
+                    _buildDot(active: _chartIndex == 1),
                   ],
                 ),
               ),
@@ -156,6 +269,45 @@ class _AccountPageState extends State<AccountPage> {
         shape: BoxShape.circle,
         color: active ? AppColors.muted : const Color(0xFFCFCFCF),
       ),
+    );
+  }
+}
+
+class _ChartData {
+  final List<double> individualValues;
+  final List<double> householdValues;
+  final List<String> weekLabels;
+
+  const _ChartData({
+    required this.individualValues,
+    required this.householdValues,
+    required this.weekLabels,
+  });
+}
+
+class _ChartPage extends StatelessWidget {
+  final String title;
+  final List<double> values;
+  final List<String> labels;
+
+  const _ChartPage({
+    required this.title,
+    required this.values,
+    required this.labels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, color: AppColors.text),
+        ),
+        const SizedBox(height: 14),
+        _BarChartCard(values: values, labels: labels),
+      ],
     );
   }
 }
@@ -354,7 +506,15 @@ class _BarChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const maxY = 6.0;
+    final highestValue = values.isEmpty
+        ? 0
+        : values.reduce((a, b) => a > b ? a : b).ceil();
+
+    final maxY = highestValue < 3 ? 3 : highestValue;
+
+    final topLabel = maxY;
+    final middleTopLabel = (maxY * 2 / 3).round();
+    final middleBottomLabel = (maxY / 3).round();
 
     return Container(
       width: double.infinity,
@@ -374,19 +534,43 @@ class _BarChartCard extends StatelessWidget {
                   width: 26,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      SizedBox(),
-                      Text(
-                        '4',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0, -9),
+                        child: Text(
+                          '$topLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
                       ),
-                      Text(
-                        '2',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                      Transform.translate(
+                        offset: const Offset(0, -4),
+                        child: Text(
+                          '$middleTopLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
                       ),
-                      Text(
-                        '0',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                      Transform.translate(
+                        offset: const Offset(0, 3),
+                        child: Text(
+                          '$middleBottomLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ),
+                      Transform.translate(
+                        offset: const Offset(0, 2),
+                        child: const Text(
+                          '0',
+                          style: TextStyle(fontSize: 14, color: AppColors.text),
+                        ),
                       ),
                     ],
                   ),
@@ -398,7 +582,7 @@ class _BarChartCard extends StatelessWidget {
                       Column(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const SizedBox(height: 1),
+                          _buildGridLine(),
                           _buildGridLine(),
                           _buildGridLine(),
                           _buildAxisLine(),
@@ -414,6 +598,7 @@ class _BarChartCard extends StatelessWidget {
                               0.0,
                               1.0,
                             );
+
                             return Expanded(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
@@ -425,12 +610,8 @@ class _BarChartCard extends StatelessWidget {
                                         heightFactor: heightFactor,
                                         child: Container(
                                           width: 42,
-                                          decoration: BoxDecoration(
+                                          decoration: const BoxDecoration(
                                             color: AppColors.blue,
-                                            borderRadius:
-                                                const BorderRadius.vertical(
-                                                  top: Radius.circular(0),
-                                                ),
                                           ),
                                         ),
                                       ),
@@ -507,6 +688,7 @@ class _StatsGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final stat = stats[index];
+
         return Container(
           decoration: BoxDecoration(
             color: AppColors.cream,
