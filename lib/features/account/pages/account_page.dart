@@ -17,6 +17,7 @@ class _AccountPageState extends State<AccountPage> {
   final List<double> weeklyValues = [2, 4, 5, 3];
   final List<String> weekLabels = ['Mar 2', 'Mar 9', 'Mar 16', 'Mar 23'];
 
+  bool _loading = true;
   String _displayName = '';
   String _username = '';
   String _householdName = '';
@@ -58,6 +59,7 @@ class _AccountPageState extends State<AccountPage> {
       _displayName = '$firstName $lastName'.trim();
       _username = username;
       _householdName = householdName;
+      _loading = false;
     });
   }
 
@@ -73,6 +75,13 @@ class _AccountPageState extends State<AccountPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

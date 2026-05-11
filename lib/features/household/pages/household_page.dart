@@ -16,6 +16,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
   final ScrollController _housematesScrollController = ScrollController();
 
   String _householdName = '';
+  bool _loading = true;
 
   List<Housemate> housemates = [
     const Housemate(firstName: 'Hillary'),
@@ -129,6 +130,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
     setState(() {
       _householdName = householdName;
       if (loaded.isNotEmpty) housemates = loaded;
+      _loading = false;
     });
   }
 
@@ -158,6 +160,13 @@ class _HouseholdPageState extends State<HouseholdPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

@@ -262,6 +262,13 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
     final weekLabel = _weekLabel();
 
     return Scaffold(
@@ -274,25 +281,21 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               const _DashboardHeader(),
               const SizedBox(height: 20),
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else ...[
-                DashboardSummaryCard(
-                  title: _displayName,
-                  weekLabel: weekLabel,
-                  centerPercent: _personalCompletionPercent(),
-                  items: _personalItems,
-                  rightColumnTitle: 'Status',
-                ),
-                const SizedBox(height: 22),
-                DashboardSummaryCard(
-                  title: _householdName,
-                  weekLabel: weekLabel,
-                  centerPercent: _householdCompletedPercent,
-                  items: _householdItems,
-                  rightColumnTitle: 'Mate',
-                ),
-              ],
+              DashboardSummaryCard(
+                title: _displayName,
+                weekLabel: weekLabel,
+                centerPercent: _personalCompletionPercent(),
+                items: _personalItems,
+                rightColumnTitle: 'Status',
+              ),
+              const SizedBox(height: 22),
+              DashboardSummaryCard(
+                title: _householdName,
+                weekLabel: weekLabel,
+                centerPercent: _householdCompletedPercent,
+                items: _householdItems,
+                rightColumnTitle: 'Mate',
+              ),
             ],
           ),
         ),
