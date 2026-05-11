@@ -1025,7 +1025,7 @@ class _HousemateProfileSection extends StatelessWidget {
             Expanded(
               child: _ProfileActionButton(
                 icon: Icons.ios_share_outlined,
-                label: 'Share',
+                label: 'Invite',
                 onTap: () {},
               ),
             ),

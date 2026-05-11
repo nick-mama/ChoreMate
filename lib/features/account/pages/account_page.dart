@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/services/auth_service.dart';
@@ -110,6 +111,28 @@ class _AccountPageState extends State<AccountPage> {
     if (!mounted) return;
     setState(() => _loading = true);
     await _loadUserData();
+  }
+
+  Future<void> _shareChoreMate() async {
+    final inviter = _displayName.isNotEmpty ? _displayName : 'Someone';
+    final householdText = _householdName.isNotEmpty
+        ? ' Join my household "$_householdName" and let’s keep chores organized together.'
+        : ' Let’s keep chores organized together.';
+
+    final message =
+        '$inviter invited you to try ChoreMate!$householdText\n\n'
+        'Download ChoreMate and make household chores easier.';
+
+    try {
+      await SharePlus.instance.share(
+        ShareParams(text: message, subject: 'Join me on ChoreMate'),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open share options.')),
+      );
+    }
   }
 
   Future<_AccountData> _loadAccountData(
@@ -300,6 +323,7 @@ class _AccountPageState extends State<AccountPage> {
                 username: _username,
                 householdName: _householdName,
                 onSettings: _openSettings,
+                onShare: _shareChoreMate,
                 onSignOut: _signOut,
               ),
               const SizedBox(height: 26),
@@ -479,6 +503,7 @@ class _ProfileSection extends StatelessWidget {
   final String username;
   final String householdName;
   final VoidCallback onSettings;
+  final VoidCallback onShare;
   final VoidCallback onSignOut;
 
   const _ProfileSection({
@@ -486,6 +511,7 @@ class _ProfileSection extends StatelessWidget {
     required this.username,
     required this.householdName,
     required this.onSettings,
+    required this.onShare,
     required this.onSignOut,
   });
 
@@ -547,8 +573,8 @@ class _ProfileSection extends StatelessWidget {
             Expanded(
               child: _ActionButton(
                 icon: Icons.ios_share_outlined,
-                label: 'Share',
-                onTap: () {},
+                label: 'Invite',
+                onTap: onShare,
               ),
             ),
             const SizedBox(width: 10),
