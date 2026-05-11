@@ -227,46 +227,33 @@ class _HouseholdPageState extends State<HouseholdPage> {
               ],
               const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: AppColors.cream,
-                  border: Border.all(color: const Color(0xFF7C7468), width: 1),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x22000000),
-                      blurRadius: 4,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                child: Column(
-                  children: [
-                    ScrollConfiguration(
-                      behavior: const _WebFriendlyScrollBehavior(),
-                      child: SizedBox(
-                        height: 170,
-                        child: Scrollbar(
-                          controller: _housematesScrollController,
-                          thumbVisibility: true,
-                          child: ListView.separated(
-                            controller: _housematesScrollController,
-                            scrollDirection: Axis.horizontal,
-                            itemCount: housemates.length,
-                            itemBuilder: (context, index) {
-                              return _HousemateCard(
-                                housemate: housemates[index],
-                                onTap: () =>
-                                    _openHousemateProfile(housemates[index]),
-                              );
-                            },
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(width: 18),
-                          ),
-                        ),
+                child: ScrollConfiguration(
+                  behavior: const _WebFriendlyScrollBehavior(),
+                  child: SizedBox(
+                    height: 160,
+                    child: Scrollbar(
+                      controller: _housematesScrollController,
+                      thumbVisibility: true,
+                      child: ListView.separated(
+                        controller: _housematesScrollController,
+                        scrollDirection: Axis.horizontal,
+                        itemCount: housemates.length,
+                        itemBuilder: (context, index) {
+                          return _HousemateCard(
+                            housemate: housemates[index],
+                            onTap: () =>
+                                _openHousemateProfile(housemates[index]),
+                          );
+                        },
+                        separatorBuilder: (_, _) => const SizedBox(width: 18),
                       ),
                     ),
-                    const SizedBox(height: 8),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 34),
