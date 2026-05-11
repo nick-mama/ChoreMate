@@ -5,6 +5,7 @@ import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_logo.dart';
+import 'account_settings_page.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -61,6 +62,7 @@ class _AccountPageState extends State<AccountPage> {
     final lastName = data['lastName'] ?? '';
     final username = data['username'] ?? '';
     final householdId = data['householdId'] ?? '';
+    final startOfWeek = data['startOfWeek'] ?? 'sunday';
 
     String householdName = '';
 
@@ -73,7 +75,11 @@ class _AccountPageState extends State<AccountPage> {
       householdName = householdDoc.data()?['name'] ?? '';
     }
 
-    final accountData = await _loadAccountData(user.uid, householdId);
+    final accountData = await _loadAccountData(
+      user.uid,
+      householdId,
+      startOfWeek,
+    );
 
     if (!mounted) return;
     setState(() {
@@ -95,8 +101,23 @@ class _AccountPageState extends State<AccountPage> {
     });
   }
 
-  Future<_AccountData> _loadAccountData(String uid, String householdId) async {
-    final chartData = _emptyChartData();
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AccountSettingsPage()),
+    );
+
+    if (!mounted) return;
+    setState(() => _loading = true);
+    await _loadUserData();
+  }
+
+  Future<_AccountData> _loadAccountData(
+    String uid,
+    String householdId,
+    String startOfWeek,
+  ) async {
+    final chartData = _emptyChartData(startOfWeek);
 
     if (householdId.isEmpty) {
       return _AccountData.fromChartData(chartData);
@@ -122,7 +143,7 @@ class _AccountPageState extends State<AccountPage> {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
+    final currentWeekStart = _startOfWeekFor(today, startOfWeek);
     final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
     final lastWeekEnd = currentWeekStart.add(const Duration(days: 7));
 
@@ -150,9 +171,7 @@ class _AccountPageState extends State<AccountPage> {
         completedAt.day,
       );
 
-      final streakWeekStart = completedDate.subtract(
-        Duration(days: completedDate.weekday % 7),
-      );
+      final streakWeekStart = _startOfWeekFor(completedDate, startOfWeek);
 
       completedWeeks.add(
         DateTime(
@@ -189,10 +208,10 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  _ChartData _emptyChartData() {
+  _ChartData _emptyChartData(String startOfWeek) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final currentWeekStart = today.subtract(Duration(days: today.weekday % 7));
+    final currentWeekStart = _startOfWeekFor(today, startOfWeek);
     final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
 
     final labels = List.generate(4, (index) {
@@ -205,6 +224,16 @@ class _AccountPageState extends State<AccountPage> {
       householdValues: List<double>.filled(4, 0),
       weekLabels: labels,
     );
+  }
+
+  DateTime _startOfWeekFor(DateTime date, String startOfWeek) {
+    final normalized = DateTime(date.year, date.month, date.day);
+
+    if (startOfWeek == 'monday') {
+      return normalized.subtract(Duration(days: normalized.weekday - 1));
+    }
+
+    return normalized.subtract(Duration(days: normalized.weekday % 7));
   }
 
   DateTime? _readDate(dynamic value) {
@@ -270,6 +299,7 @@ class _AccountPageState extends State<AccountPage> {
                 displayName: _displayName,
                 username: _username,
                 householdName: _householdName,
+                onSettings: _openSettings,
                 onSignOut: _signOut,
               ),
               const SizedBox(height: 26),
@@ -448,12 +478,14 @@ class _ProfileSection extends StatelessWidget {
   final String displayName;
   final String username;
   final String householdName;
+  final VoidCallback onSettings;
   final VoidCallback onSignOut;
 
   const _ProfileSection({
     required this.displayName,
     required this.username,
     required this.householdName,
+    required this.onSettings,
     required this.onSignOut,
   });
 
@@ -508,7 +540,7 @@ class _ProfileSection extends StatelessWidget {
               child: _ActionButton(
                 icon: Icons.settings_outlined,
                 label: 'Settings',
-                onTap: () {},
+                onTap: onSettings,
               ),
             ),
             const SizedBox(width: 10),

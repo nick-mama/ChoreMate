@@ -1,0 +1,582 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../app/theme/app_colors.dart';
+
+class AccountSettingsPage extends StatefulWidget {
+  const AccountSettingsPage({super.key});
+
+  @override
+  State<AccountSettingsPage> createState() => _AccountSettingsPageState();
+}
+
+class _AccountSettingsPageState extends State<AccountSettingsPage> {
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
+
+  final _usernameController = TextEditingController();
+
+  bool _loading = true;
+  bool _savingUsername = false;
+  bool _savingStartOfWeek = false;
+
+  String _email = '';
+  String _startOfWeek = 'sunday';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final doc = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get(const GetOptions(source: Source.server));
+
+    final data = doc.data() ?? {};
+
+    if (!mounted) return;
+    setState(() {
+      _email = user.email ?? '';
+      _usernameController.text = data['username'] ?? '';
+      _startOfWeek = data['startOfWeek'] ?? 'sunday';
+      _loading = false;
+    });
+  }
+
+  Future<void> _saveUsername() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final username = _usernameController.text.trim();
+
+    if (username.isEmpty) {
+      _showMessage('Username cannot be empty.');
+      return;
+    }
+
+    setState(() => _savingUsername = true);
+
+    try {
+      await _firestore.collection('users').doc(user.uid).update({
+        'username': username,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      _showMessage('Username updated.');
+    } catch (_) {
+      _showMessage('Could not update username.');
+    } finally {
+      if (mounted) setState(() => _savingUsername = false);
+    }
+  }
+
+  Future<void> _saveStartOfWeek(String value) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _startOfWeek = value;
+      _savingStartOfWeek = true;
+    });
+
+    try {
+      await _firestore.collection('users').doc(user.uid).update({
+        'startOfWeek': value,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      _showMessage('Start of week updated.');
+    } catch (_) {
+      _showMessage('Could not update start of week.');
+    } finally {
+      if (mounted) setState(() => _savingStartOfWeek = false);
+    }
+  }
+
+  Future<void> _changeEmail() async {
+    final newEmailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    final confirmed = await _showAuthDialog(
+      title: 'Change Email',
+      fields: [
+        _DialogField(
+          controller: newEmailController,
+          label: 'New email',
+          keyboardType: TextInputType.emailAddress,
+        ),
+        _DialogField(
+          controller: passwordController,
+          label: 'Current password',
+          obscureText: true,
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    final user = _auth.currentUser;
+    final currentEmail = user?.email;
+    final newEmail = newEmailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (user == null || currentEmail == null) return;
+
+    if (newEmail.isEmpty || password.isEmpty) {
+      _showMessage('Please fill out all fields.');
+      return;
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: currentEmail,
+        password: password,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      await user.verifyBeforeUpdateEmail(newEmail);
+
+      if (!mounted) return;
+      _showMessage('Verification email sent to $newEmail.');
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authErrorMessage(e));
+    } catch (_) {
+      _showMessage('Could not change email.');
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final oldPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+
+    final confirmed = await _showAuthDialog(
+      title: 'Change Password',
+      fields: [
+        _DialogField(
+          controller: oldPasswordController,
+          label: 'Current password',
+          obscureText: true,
+        ),
+        _DialogField(
+          controller: newPasswordController,
+          label: 'New password',
+          obscureText: true,
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    final user = _auth.currentUser;
+    final currentEmail = user?.email;
+    final oldPassword = oldPasswordController.text.trim();
+    final newPassword = newPasswordController.text.trim();
+
+    if (user == null || currentEmail == null) return;
+
+    if (oldPassword.isEmpty || newPassword.isEmpty) {
+      _showMessage('Please fill out all fields.');
+      return;
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: currentEmail,
+        password: oldPassword,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+
+      if (!mounted) return;
+      _showMessage('Password updated.');
+    } on FirebaseAuthException catch (e) {
+      _showMessage(_authErrorMessage(e));
+    } catch (_) {
+      _showMessage('Could not change password.');
+    }
+  }
+
+  Future<bool?> _showAuthDialog({
+    required String title,
+    required List<_DialogField> fields,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.background,
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: fields.map((field) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  controller: field.controller,
+                  obscureText: field.obscureText,
+                  keyboardType: field.keyboardType,
+                  decoration: InputDecoration(
+                    labelText: field.label,
+                    filled: true,
+                    fillColor: AppColors.field,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: AppColors.text),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.tan,
+                foregroundColor: Colors.white,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _authErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Current password is incorrect.';
+      case 'weak-password':
+        return 'New password is too weak.';
+      case 'email-already-in-use':
+        return 'That email is already in use.';
+      case 'invalid-email':
+        return 'Please enter a valid email.';
+      case 'requires-recent-login':
+        return 'Please log out and log back in before making this change.';
+      default:
+        return 'Something went wrong. Please try again.';
+    }
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: AppColors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppColors.text,
+          ),
+        ),
+        title: const Text(
+          'Settings',
+          style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w700),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            28 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _SettingsCard(
+                title: 'Account',
+                children: [
+                  _InfoRow(label: 'Email', value: _email),
+                  const SizedBox(height: 14),
+                  _SettingsButton(
+                    icon: Icons.email_outlined,
+                    label: 'Change Email',
+                    onTap: _changeEmail,
+                  ),
+                  const SizedBox(height: 10),
+                  _SettingsButton(
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Change Password',
+                    onTap: _changePassword,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _SettingsCard(
+                title: 'Profile',
+                children: [
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      labelText: 'Username',
+                      filled: true,
+                      fillColor: AppColors.field,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _PrimaryButton(
+                    label: _savingUsername ? 'Saving...' : 'Save Username',
+                    onTap: _savingUsername ? null : _saveUsername,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _SettingsCard(
+                title: 'Preferences',
+                children: [
+                  const Text(
+                    'Start of Week',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.text,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  RadioGroup<String>(
+                    groupValue: _startOfWeek,
+                    onChanged: (value) {
+                      if (value == null || _savingStartOfWeek) return;
+                      _saveStartOfWeek(value);
+                    },
+                    child: const Column(
+                      children: [
+                        _WeekOption(label: 'Sunday', value: 'sunday'),
+                        _WeekOption(label: 'Monday', value: 'monday'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogField {
+  final TextEditingController controller;
+  final String label;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+
+  const _DialogField({
+    required this.controller,
+    required this.label,
+    this.obscureText = false,
+    this.keyboardType,
+  });
+}
+
+class _SettingsCard extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SettingsCard({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.text,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 15, color: AppColors.muted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SettingsButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 46,
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.tan,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+class _PrimaryButton extends StatelessWidget {
+  final String label;
+  final VoidCallback? onTap;
+
+  const _PrimaryButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 46,
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.tan,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        onPressed: onTap,
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
+
+class _WeekOption extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _WeekOption({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<String>(
+      value: value,
+      activeColor: AppColors.tan,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        label,
+        style: const TextStyle(fontSize: 15, color: AppColors.text),
+      ),
+    );
+  }
+}

@@ -100,7 +100,7 @@ class _VerifyEmailPageState extends State<VerifyEmailPage> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (_, __) {
+      onPopInvokedWithResult: (_, _) {
         if (!loading) _goBack();
       },
       child: GestureDetector(

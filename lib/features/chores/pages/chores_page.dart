@@ -21,6 +21,7 @@ class _ChoresPageState extends State<ChoresPage> {
   bool _loadingHousehold = true;
 
   String _householdId = '';
+  String _startOfWeek = 'sunday';
   List<HouseholdMember> roommates = [];
 
   @override
@@ -38,6 +39,7 @@ class _ChoresPageState extends State<ChoresPage> {
     if (userData == null) return;
 
     final householdId = userData['householdId'] ?? '';
+    final startOfWeek = userData['startOfWeek'] ?? 'sunday';
 
     final usersSnapshot = await _db
         .collection('users')
@@ -62,6 +64,7 @@ class _ChoresPageState extends State<ChoresPage> {
 
     setState(() {
       _householdId = householdId;
+      _startOfWeek = startOfWeek;
       roommates = loadedRoommates;
       _loadingHousehold = false;
     });
@@ -503,13 +506,20 @@ class _ChoresPageState extends State<ChoresPage> {
     return DateTime(year, month, day);
   }
 
+  DateTime _startOfWeekFor(DateTime date, String startOfWeek) {
+    final normalized = DateTime(date.year, date.month, date.day);
+
+    if (startOfWeek == 'monday') {
+      return normalized.subtract(Duration(days: normalized.weekday - 1));
+    }
+
+    return normalized.subtract(Duration(days: normalized.weekday % 7));
+  }
+
   String _weekLabel() {
     final now = DateTime.now();
-    final weekStart = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
+    final today = DateTime(now.year, now.month, now.day);
+    final weekStart = _startOfWeekFor(today, _startOfWeek);
 
     return 'Week of ${_monthName(weekStart.month)} ${weekStart.day}';
   }

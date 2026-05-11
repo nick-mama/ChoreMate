@@ -17,6 +17,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   String _displayName = 'Person Name';
   String _householdName = 'Household';
+  String _startOfWeek = 'sunday';
 
   int _householdCompletedPercent = 0;
 
@@ -42,14 +43,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final now = DateTime.now();
-    final weekStart = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
-    final weekEnd = weekStart.add(const Duration(days: 7));
-
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
@@ -61,6 +54,12 @@ class _DashboardPageState extends State<DashboardPage> {
     final householdId = userData['householdId'] ?? '';
     final firstName = userData['firstName'] ?? '';
     final lastName = userData['lastName'] ?? '';
+    final startOfWeek = userData['startOfWeek'] ?? 'sunday';
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final weekStart = _startOfWeekFor(today, startOfWeek);
+    final weekEnd = weekStart.add(const Duration(days: 7));
 
     String householdName = 'Household';
 
@@ -92,23 +91,29 @@ class _DashboardPageState extends State<DashboardPage> {
       final dueDate = _readDate(chore['dueDate']);
       if (dueDate == null) return false;
 
-      return chore['completed'] != true && dueDate.isBefore(weekStart);
+      final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+      return chore['completed'] != true && dueDateOnly.isBefore(weekStart);
     }).length;
 
     final todoThisWeek = personalChores.where((chore) {
       final dueDate = _readDate(chore['dueDate']);
       if (dueDate == null) return false;
 
+      final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
       return chore['completed'] != true &&
-          !dueDate.isBefore(weekStart) &&
-          dueDate.isBefore(weekEnd);
+          !dueDateOnly.isBefore(weekStart) &&
+          dueDateOnly.isBefore(weekEnd);
     }).length;
 
     final futureTodo = personalChores.where((chore) {
       final dueDate = _readDate(chore['dueDate']);
       if (dueDate == null) return false;
 
-      return chore['completed'] != true && !dueDate.isBefore(weekEnd);
+      final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+      return chore['completed'] != true && !dueDateOnly.isBefore(weekEnd);
     }).length;
 
     final personalItems = [
@@ -142,7 +147,9 @@ class _DashboardPageState extends State<DashboardPage> {
       final dueDate = _readDate(chore['dueDate']);
       if (dueDate == null) return false;
 
-      return !dueDate.isBefore(weekStart) && dueDate.isBefore(weekEnd);
+      final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+      return !dueDateOnly.isBefore(weekStart) && dueDateOnly.isBefore(weekEnd);
     }).toList();
 
     final completedThisWeek = weeklyChores.where((chore) {
@@ -193,6 +200,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ? '$firstName $lastName'.trim()
           : 'Person Name';
       _householdName = householdName;
+      _startOfWeek = startOfWeek;
       _personalItems = personalItems;
       _householdItems = householdItems;
       _householdCompletedPercent = _percent(
@@ -201,6 +209,16 @@ class _DashboardPageState extends State<DashboardPage> {
       );
       _isLoading = false;
     });
+  }
+
+  DateTime _startOfWeekFor(DateTime date, String startOfWeek) {
+    final normalized = DateTime(date.year, date.month, date.day);
+
+    if (startOfWeek == 'monday') {
+      return normalized.subtract(Duration(days: normalized.weekday - 1));
+    }
+
+    return normalized.subtract(Duration(days: normalized.weekday % 7));
   }
 
   DateTime? _readDate(dynamic value) {
@@ -215,16 +233,16 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   int _personalCompletionPercent() {
-    final total = _personalItems.fold<double>(0, (sum, item) {
-      return sum + item.value;
+    final total = _personalItems.fold<double>(0, (total, item) {
+      return total + item.value;
     });
 
     if (total == 0) return 0;
 
     final completed = _personalItems
         .where((item) => item.label == 'Completed')
-        .fold<double>(0, (sum, item) {
-          return sum + item.value;
+        .fold<double>(0, (total, item) {
+          return total + item.value;
         });
 
     return ((completed / total) * 100).round();
@@ -232,11 +250,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   String _weekLabel() {
     final now = DateTime.now();
-    final weekStart = DateTime(
-      now.year,
-      now.month,
-      now.day,
-    ).subtract(Duration(days: now.weekday - 1));
+    final today = DateTime(now.year, now.month, now.day);
+    final weekStart = _startOfWeekFor(today, _startOfWeek);
 
     return 'Week of ${_monthName(weekStart.month)} ${weekStart.day}, ${weekStart.year}';
   }
@@ -502,7 +517,7 @@ class _LegendTable extends StatelessWidget {
               ),
             ),
             const SizedBox(
-              width: 42,
+              width: 56,
               child: Text(
                 '%',
                 textAlign: TextAlign.right,
@@ -540,9 +555,10 @@ class _LegendTable extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: 42,
+                  width: 56,
                   child: Text(
                     '${item.displayPercent}%',
+                    maxLines: 1,
                     textAlign: TextAlign.right,
                     style: const TextStyle(fontSize: 16, color: AppColors.text),
                   ),

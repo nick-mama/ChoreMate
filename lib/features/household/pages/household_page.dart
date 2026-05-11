@@ -15,87 +15,18 @@ class HouseholdPage extends StatefulWidget {
 class _HouseholdPageState extends State<HouseholdPage> {
   final ScrollController _housematesScrollController = ScrollController();
 
+  String _householdId = '';
   String _householdName = '';
+  String _startOfWeek = 'sunday';
   bool _loading = true;
   bool overdueExpanded = true;
   bool todoExpanded = true;
   bool completedExpanded = true;
 
-  List<Housemate> housemates = [
-    const Housemate(firstName: 'Hillary'),
-    const Housemate(firstName: 'Garrett'),
-    const Housemate(firstName: 'Geoffrey'),
-    const Housemate(firstName: 'Nick'),
-  ];
-
-  final List<HouseholdActivity> overdueActivities = [
-    const HouseholdActivity(
-      title: 'Kitchen Counters',
-      timestamp: '3/18/2026',
-      details: 'Assigned to Hillary',
-      completedBy: 'Hillary',
-    ),
-    const HouseholdActivity(
-      title: 'Take Out Trash',
-      timestamp: '3/19/2026',
-      details: 'Assigned to Geoffrey',
-      completedBy: 'Geoffrey',
-    ),
-  ];
-
-  final List<HouseholdActivity> todoActivities = [
-    const HouseholdActivity(
-      title: 'Vacuum Living Room',
-      timestamp: '3/24/2026',
-      details: 'Assigned to Nick',
-      completedBy: 'Nick',
-    ),
-    const HouseholdActivity(
-      title: 'Clean Bathroom',
-      timestamp: '3/25/2026',
-      details: 'Assigned to Garrett',
-      completedBy: 'Garrett',
-    ),
-  ];
-
-  final List<HouseholdActivity> activities = [
-    const HouseholdActivity(
-      title: 'Laundry',
-      timestamp: '3/20/2026, 3:22pm',
-      details: 'Completed by Hillary',
-      completedBy: 'Hillary',
-    ),
-    const HouseholdActivity(
-      title: 'Dishwashing',
-      timestamp: '3/19/2026, 1:18pm',
-      details: 'Completed by Garrett',
-      completedBy: 'Garrett',
-    ),
-    const HouseholdActivity(
-      title: 'Trash',
-      timestamp: '3/19/2026, 11:01am',
-      details: 'Completed by Geoffrey',
-      completedBy: 'Geoffrey',
-    ),
-    const HouseholdActivity(
-      title: 'Vacuuming',
-      timestamp: '3/18/2026, 7:22pm',
-      details: 'Completed by Nick',
-      completedBy: 'Nick',
-    ),
-    const HouseholdActivity(
-      title: 'Dusting',
-      timestamp: '3/16/2026, 5:13pm',
-      details: 'Completed by Hillary',
-      completedBy: 'Hillary',
-    ),
-    const HouseholdActivity(
-      title: 'Tidying',
-      timestamp: '3/16/2026, 5:13pm',
-      details: 'Completed by Geoffrey',
-      completedBy: 'Geoffrey',
-    ),
-  ];
+  List<Housemate> housemates = [];
+  List<HouseholdActivity> overdueActivities = [];
+  List<HouseholdActivity> todoActivities = [];
+  List<HouseholdActivity> completedActivities = [];
 
   @override
   void initState() {
@@ -118,8 +49,15 @@ class _HouseholdPageState extends State<HouseholdPage> {
         .doc(user.uid)
         .get(const GetOptions(source: Source.server));
 
-    final householdId = userDoc.data()?['householdId'] ?? '';
-    if (householdId.isEmpty) return;
+    final userData = userDoc.data();
+    final householdId = userData?['householdId'] ?? '';
+    final startOfWeek = userData?['startOfWeek'] ?? 'sunday';
+
+    if (householdId.isEmpty) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      return;
+    }
 
     final householdDoc = await FirebaseFirestore.instance
         .collection('households')
@@ -127,15 +65,38 @@ class _HouseholdPageState extends State<HouseholdPage> {
         .get(const GetOptions(source: Source.server));
 
     final householdData = householdDoc.data();
-    if (householdData == null) return;
+    if (householdData == null) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      return;
+    }
 
     final householdName = (householdData['name'] as String?) ?? '';
+    final loadedHousemates = await _loadHousemates(householdData);
+    final loadedActivities = await _loadActivities(householdId);
 
+    if (!mounted) return;
+    setState(() {
+      _householdId = householdId;
+      _householdName = householdName;
+      _startOfWeek = startOfWeek;
+      housemates = loadedHousemates;
+      overdueActivities = loadedActivities.overdue;
+      todoActivities = loadedActivities.todo;
+      completedActivities = loadedActivities.completed;
+      _loading = false;
+    });
+  }
+
+  Future<List<Housemate>> _loadHousemates(
+    Map<String, dynamic> householdData,
+  ) async {
     final rawMembers = householdData['members'];
     final memberUids = rawMembers is List
         ? rawMembers.whereType<String>().toList()
         : <String>[];
-    final List<Housemate> loaded = [];
+
+    final loaded = <Housemate>[];
 
     for (final uid in memberUids) {
       final memberDoc = await FirebaseFirestore.instance
@@ -152,6 +113,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
 
       loaded.add(
         Housemate(
+          uid: uid,
           firstName: firstName.isNotEmpty ? firstName : uid,
           lastName: lastName,
           username: username,
@@ -159,12 +121,74 @@ class _HouseholdPageState extends State<HouseholdPage> {
       );
     }
 
-    if (!mounted) return;
-    setState(() {
-      _householdName = householdName;
-      if (loaded.isNotEmpty) housemates = loaded;
-      _loading = false;
-    });
+    return loaded;
+  }
+
+  Future<_HouseholdActivities> _loadActivities(String householdId) async {
+    final choresSnapshot = await FirebaseFirestore.instance
+        .collection('chores')
+        .where('householdId', isEqualTo: householdId)
+        .get(const GetOptions(source: Source.server));
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final overdue = <HouseholdActivity>[];
+    final todo = <HouseholdActivity>[];
+    final completed = <HouseholdActivity>[];
+
+    for (final doc in choresSnapshot.docs) {
+      final data = doc.data();
+
+      final title = (data['name'] ?? 'Chore').toString();
+      final assignedToName = (data['assignedToName'] ?? '').toString();
+      final completedBy = assignedToName.isNotEmpty
+          ? assignedToName
+          : 'Housemate';
+      final dueDate = _readDate(data['dueDate']);
+      final completedAt = _readDate(data['completedAt']);
+      final completedValue = data['completed'] == true;
+
+      if (completedValue) {
+        completed.add(
+          HouseholdActivity(
+            title: title,
+            timestamp: _formatDateTime(completedAt),
+            details: 'Completed by $completedBy',
+            completedBy: completedBy,
+            createdAt: _formatDateTime(dueDate),
+          ),
+        );
+      } else {
+        final dueDateOnly = dueDate == null
+            ? null
+            : DateTime(dueDate.year, dueDate.month, dueDate.day);
+
+        final activity = HouseholdActivity(
+          title: title,
+          timestamp: _formatDate(dueDate),
+          details: assignedToName.isNotEmpty
+              ? 'Assigned to $assignedToName'
+              : 'Unassigned',
+          completedBy: assignedToName,
+          createdAt: _formatDateTime(dueDate),
+        );
+
+        if (dueDateOnly != null && dueDateOnly.isBefore(today)) {
+          overdue.add(activity);
+        } else {
+          todo.add(activity);
+        }
+      }
+    }
+
+    completed.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    return _HouseholdActivities(
+      overdue: overdue,
+      todo: todo,
+      completed: completed,
+    );
   }
 
   void _showActivityOverlay(HouseholdActivity activity) {
@@ -176,19 +200,42 @@ class _HouseholdPageState extends State<HouseholdPage> {
   }
 
   void _openHousemateProfile(Housemate housemate) {
-    final housemateActivities = activities
-        .where((a) => a.completedBy == housemate.firstName)
-        .toList();
-
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => HousemateProfilePage(
           housemate: housemate,
-          activities: housemateActivities,
+          householdId: _householdId,
+          startOfWeek: _startOfWeek,
         ),
       ),
     );
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  static String _formatDate(DateTime? date) {
+    if (date == null) return '';
+    return '${date.month}/${date.day}/${date.year}';
+  }
+
+  static String _formatDateTime(DateTime? date) {
+    if (date == null) return '';
+
+    final hour = date.hour == 0
+        ? 12
+        : date.hour > 12
+        ? date.hour - 12
+        : date.hour;
+
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'pm' : 'am';
+
+    return '${date.month}/${date.day}/${date.year}, $hour:$minute$period';
   }
 
   @override
@@ -204,7 +251,12 @@ class _HouseholdPageState extends State<HouseholdPage> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            28 + MediaQuery.of(context).padding.bottom,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -335,10 +387,10 @@ class _HouseholdPageState extends State<HouseholdPage> {
               ),
               const SizedBox(height: 12),
               if (completedExpanded) ...[
-                if (activities.isEmpty)
+                if (completedActivities.isEmpty)
                   const _EmptyStateCard(text: 'No completed chores yet.')
                 else
-                  ...activities.map(
+                  ...completedActivities.map(
                     (activity) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: _HouseholdActivityTile(
@@ -352,6 +404,312 @@ class _HouseholdPageState extends State<HouseholdPage> {
                     ),
                   ),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HousemateProfilePage extends StatefulWidget {
+  final Housemate housemate;
+  final String householdId;
+  final String startOfWeek;
+
+  const HousemateProfilePage({
+    super.key,
+    required this.housemate,
+    required this.householdId,
+    required this.startOfWeek,
+  });
+
+  @override
+  State<HousemateProfilePage> createState() => _HousemateProfilePageState();
+}
+
+class _HousemateProfilePageState extends State<HousemateProfilePage> {
+  bool _loading = true;
+
+  List<double> weeklyValues = [0, 0, 0, 0];
+  List<String> weekLabels = ['', '', '', ''];
+  List<HouseholdActivity> choreHistory = [];
+
+  int choresDone = 0;
+  int totalChores = 0;
+  int uniqueChores = 0;
+  int choreStreak = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHousemateData();
+  }
+
+  Future<void> _loadHousemateData() async {
+    final emptyData = _emptyHousemateData();
+
+    if (widget.householdId.isEmpty || widget.housemate.uid.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        weeklyValues = emptyData.weeklyValues;
+        weekLabels = emptyData.weekLabels;
+        _loading = false;
+      });
+      return;
+    }
+
+    final choresSnapshot = await FirebaseFirestore.instance
+        .collection('chores')
+        .where('householdId', isEqualTo: widget.householdId)
+        .get(const GetOptions(source: Source.server));
+
+    final uniqueNames = <String>{};
+    final completedWeeks = <DateTime>{};
+    final history = <HouseholdActivity>[];
+
+    var completedCount = 0;
+    var assignedCount = 0;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = _startOfWeekFor(today, widget.startOfWeek);
+    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
+    final lastWeekEnd = currentWeekStart.add(const Duration(days: 7));
+
+    final weeklyCounts = List<double>.filled(4, 0);
+
+    for (final doc in choresSnapshot.docs) {
+      final data = doc.data();
+
+      if (data['assignedTo'] != widget.housemate.uid) continue;
+
+      assignedCount += 1;
+
+      final name = (data['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) {
+        uniqueNames.add(name.toLowerCase());
+      }
+
+      if (data['completed'] != true) continue;
+
+      completedCount += 1;
+
+      final completedAt = _readDate(data['completedAt']);
+      if (completedAt == null) continue;
+
+      final completedDate = DateTime(
+        completedAt.year,
+        completedAt.month,
+        completedAt.day,
+      );
+
+      final weekStart = _startOfWeekFor(completedDate, widget.startOfWeek);
+
+      completedWeeks.add(
+        DateTime(weekStart.year, weekStart.month, weekStart.day),
+      );
+
+      history.add(
+        HouseholdActivity(
+          title: name.isNotEmpty ? name : 'Chore',
+          timestamp: _formatDateTime(completedAt),
+          details: 'Completed by ${widget.housemate.firstName}',
+          completedBy: widget.housemate.firstName,
+          createdAt: _formatDateTime(_readDate(data['dueDate'])),
+        ),
+      );
+
+      if (completedDate.isBefore(firstWeekStart) ||
+          !completedDate.isBefore(lastWeekEnd)) {
+        continue;
+      }
+
+      final weekIndex = completedDate.difference(firstWeekStart).inDays ~/ 7;
+      if (weekIndex < 0 || weekIndex > 3) continue;
+
+      weeklyCounts[weekIndex] += 1;
+    }
+
+    history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    if (!mounted) return;
+    setState(() {
+      weeklyValues = weeklyCounts;
+      weekLabels = emptyData.weekLabels;
+      choreHistory = history;
+      choresDone = completedCount;
+      totalChores = assignedCount;
+      uniqueChores = uniqueNames.length;
+      choreStreak = completedWeeks.length;
+      _loading = false;
+    });
+  }
+
+  _HousemateData _emptyHousemateData() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final currentWeekStart = _startOfWeekFor(today, widget.startOfWeek);
+    final firstWeekStart = currentWeekStart.subtract(const Duration(days: 21));
+
+    final labels = List.generate(4, (index) {
+      final weekStart = firstWeekStart.add(Duration(days: index * 7));
+      return '${_shortMonthName(weekStart.month)} ${weekStart.day}';
+    });
+
+    return _HousemateData(
+      weeklyValues: List<double>.filled(4, 0),
+      weekLabels: labels,
+    );
+  }
+
+  DateTime _startOfWeekFor(DateTime date, String startOfWeek) {
+    final normalized = DateTime(date.year, date.month, date.day);
+
+    if (startOfWeek == 'monday') {
+      return normalized.subtract(Duration(days: normalized.weekday - 1));
+    }
+
+    return normalized.subtract(Duration(days: normalized.weekday % 7));
+  }
+
+  DateTime? _readDate(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  String _formatDateTime(DateTime? date) {
+    if (date == null) return '';
+
+    final hour = date.hour == 0
+        ? 12
+        : date.hour > 12
+        ? date.hour - 12
+        : date.hour;
+
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'pm' : 'am';
+
+    return '${date.month}/${date.day}/${date.year}, $hour:$minute$period';
+  }
+
+  String _shortMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return months[month - 1];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(child: Center(child: CircularProgressIndicator())),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            16,
+            20,
+            28 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 26,
+                      color: AppColors.text,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: AppLogo(type: LogoType.wordmark, width: 200),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 28),
+              _HousemateProfileSection(housemate: widget.housemate),
+              const SizedBox(height: 26),
+              const Text(
+                'Chores Completed',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Individual',
+                style: TextStyle(fontSize: 16, color: AppColors.text),
+              ),
+              const SizedBox(height: 14),
+              _BarChartCard(values: weeklyValues, labels: weekLabels),
+              const SizedBox(height: 26),
+              const Text(
+                'Chore History',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (choreHistory.isEmpty)
+                const Text(
+                  'No chores recorded yet.',
+                  style: TextStyle(fontSize: 15, color: AppColors.muted),
+                )
+              else
+                ...choreHistory.map(
+                  (activity) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _HousemateActivityTile(activity: activity),
+                  ),
+                ),
+              const SizedBox(height: 26),
+              const Text(
+                'Account Stats',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.text,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _HousemateStatsGrid(
+                choresDone: choresDone,
+                totalChores: totalChores,
+                uniqueChores: uniqueChores,
+                choreStreak: choreStreak,
+              ),
             ],
           ),
         ),
@@ -593,137 +951,9 @@ class _OverlayField extends StatelessWidget {
               text: '$label\n',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            TextSpan(text: value),
+            TextSpan(text: value.isNotEmpty ? value : 'Not available'),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class HousemateProfilePage extends StatelessWidget {
-  final Housemate housemate;
-  final List<HouseholdActivity> activities;
-  final List<double> weeklyValues;
-  final List<String> weekLabels;
-
-  HousemateProfilePage({
-    super.key,
-    required this.housemate,
-    required this.activities,
-  }) : weeklyValues = [1, 3, 2, 4],
-       weekLabels = ['Mar 2', 'Mar 9', 'Mar 16', 'Mar 23'];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            16,
-            20,
-            28 + MediaQuery.of(context).padding.bottom,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
-                      size: 26,
-                      color: AppColors.text,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: AppLogo(type: LogoType.wordmark, width: 200),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 28),
-              _HousemateProfileSection(housemate: housemate),
-              const SizedBox(height: 26),
-              const Text(
-                'Chores Completed',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Individual',
-                style: TextStyle(fontSize: 16, color: AppColors.text),
-              ),
-              const SizedBox(height: 14),
-              _HousemateBarChartCard(values: weeklyValues, labels: weekLabels),
-              const SizedBox(height: 10),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildDot(active: true),
-                    const SizedBox(width: 6),
-                    _buildDot(active: false),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 26),
-              const Text(
-                'Chore History',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (activities.isEmpty)
-                const Text(
-                  'No chores recorded yet.',
-                  style: TextStyle(fontSize: 15, color: AppColors.muted),
-                )
-              else
-                ...activities.map(
-                  (activity) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _HousemateActivityTile(activity: activity),
-                  ),
-                ),
-              const SizedBox(height: 26),
-              const Text(
-                'Account Stats',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.text,
-                ),
-              ),
-              const SizedBox(height: 14),
-              _HousemateStatsGrid(choresDone: activities.length),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDot({required bool active}) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: active ? AppColors.muted : const Color(0xFFCFCFCF),
       ),
     );
   }
@@ -800,7 +1030,7 @@ class _HousemateProfileSection extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Expanded(child: _PrivacyBadgeButton()),
+            const Expanded(child: _PrivacyBadgeButton()),
           ],
         ),
       ],
@@ -845,6 +1075,8 @@ class _ProfileActionButton extends StatelessWidget {
 }
 
 class _PrivacyBadgeButton extends StatelessWidget {
+  const _PrivacyBadgeButton();
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -905,15 +1137,23 @@ class _HousemateActivityTile extends StatelessWidget {
   }
 }
 
-class _HousemateBarChartCard extends StatelessWidget {
+class _BarChartCard extends StatelessWidget {
   final List<double> values;
   final List<String> labels;
 
-  const _HousemateBarChartCard({required this.values, required this.labels});
+  const _BarChartCard({required this.values, required this.labels});
 
   @override
   Widget build(BuildContext context) {
-    const maxY = 6.0;
+    final highestValue = values.isEmpty
+        ? 0
+        : values.reduce((a, b) => a > b ? a : b).ceil();
+
+    final maxY = highestValue < 3 ? 3 : highestValue;
+
+    final topLabel = maxY;
+    final middleTopLabel = (maxY * 2 / 3).round();
+    final middleBottomLabel = (maxY / 3).round();
 
     return Container(
       width: double.infinity,
@@ -933,19 +1173,43 @@ class _HousemateBarChartCard extends StatelessWidget {
                   width: 26,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      SizedBox(),
-                      Text(
-                        '4',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0, -9),
+                        child: Text(
+                          '$topLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
                       ),
-                      Text(
-                        '2',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                      Transform.translate(
+                        offset: const Offset(0, -4),
+                        child: Text(
+                          '$middleTopLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
                       ),
-                      Text(
-                        '0',
-                        style: TextStyle(fontSize: 14, color: AppColors.text),
+                      Transform.translate(
+                        offset: const Offset(0, 3),
+                        child: Text(
+                          '$middleBottomLabel',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.text,
+                          ),
+                        ),
+                      ),
+                      Transform.translate(
+                        offset: const Offset(0, 2),
+                        child: const Text(
+                          '0',
+                          style: TextStyle(fontSize: 14, color: AppColors.text),
+                        ),
                       ),
                     ],
                   ),
@@ -957,7 +1221,7 @@ class _HousemateBarChartCard extends StatelessWidget {
                       Column(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const SizedBox(height: 1),
+                          _buildGridLine(),
                           _buildGridLine(),
                           _buildGridLine(),
                           _buildAxisLine(),
@@ -973,6 +1237,7 @@ class _HousemateBarChartCard extends StatelessWidget {
                               0.0,
                               1.0,
                             );
+
                             return Expanded(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.end,
@@ -1038,22 +1303,30 @@ class _HousemateBarChartCard extends StatelessWidget {
 
 class _HousemateStatsGrid extends StatelessWidget {
   final int choresDone;
+  final int totalChores;
+  final int uniqueChores;
+  final int choreStreak;
 
-  const _HousemateStatsGrid({required this.choresDone});
+  const _HousemateStatsGrid({
+    required this.choresDone,
+    required this.totalChores,
+    required this.uniqueChores,
+    required this.choreStreak,
+  });
 
   @override
   Widget build(BuildContext context) {
     final stats = [
       _StatItem(value: '$choresDone', label: 'Chores Done'),
-      const _StatItem(value: '20', label: 'Total Chores'),
-      const _StatItem(value: '5', label: 'Unique Chores'),
-      const _StatItem(value: '6.5', label: 'Hours of Chores'),
-      const _StatItem(
-        value: '2',
+      _StatItem(value: '$totalChores', label: 'Total Chores'),
+      _StatItem(value: '$uniqueChores', label: 'Unique Chores'),
+      _StatItem(
+        value: '$choreStreak',
         valueSuffix: '\nweeks',
         label: 'Chore Streak',
       ),
-      const _StatItem(value: '3', label: 'Roommates'),
+      const _StatItem(value: '', label: '', isPlaceholder: true),
+      const _StatItem(value: '', label: '', isPlaceholder: true),
     ];
 
     return GridView.builder(
@@ -1071,57 +1344,89 @@ class _HousemateStatsGrid extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.cream,
+            color: stat.isPlaceholder
+                ? const Color(0xFFD9D9D9)
+                : AppColors.cream,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
+          child: stat.isPlaceholder
+              ? const SizedBox.expand()
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    TextSpan(
-                      text: stat.value,
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        children: [
+                          TextSpan(
+                            text: stat.value,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.text,
+                            ),
+                          ),
+                          if (stat.valueSuffix != null)
+                            TextSpan(
+                              text: ' ${stat.valueSuffix}',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.text,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      stat.label,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                         color: AppColors.text,
                       ),
                     ),
-                    if (stat.valueSuffix != null)
-                      TextSpan(
-                        text: ' ${stat.valueSuffix}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.text,
-                        ),
-                      ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                stat.label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.text),
-              ),
-            ],
-          ),
         );
       },
     );
   }
 }
 
+class _HouseholdActivities {
+  final List<HouseholdActivity> overdue;
+  final List<HouseholdActivity> todo;
+  final List<HouseholdActivity> completed;
+
+  const _HouseholdActivities({
+    required this.overdue,
+    required this.todo,
+    required this.completed,
+  });
+}
+
+class _HousemateData {
+  final List<double> weeklyValues;
+  final List<String> weekLabels;
+
+  const _HousemateData({required this.weeklyValues, required this.weekLabels});
+}
+
 class _StatItem {
   final String value;
   final String label;
   final String? valueSuffix;
+  final bool isPlaceholder;
 
-  const _StatItem({required this.value, required this.label, this.valueSuffix});
+  const _StatItem({
+    required this.value,
+    required this.label,
+    this.valueSuffix,
+    this.isPlaceholder = false,
+  });
 }
 
 class ProfileAvatar extends StatelessWidget {
@@ -1153,12 +1458,14 @@ class ProfileAvatar extends StatelessWidget {
 }
 
 class Housemate {
+  final String uid;
   final String firstName;
   final String lastName;
   final String? imagePath;
   final String username;
 
   const Housemate({
+    required this.uid,
     required this.firstName,
     this.lastName = '',
     this.imagePath,
@@ -1180,7 +1487,7 @@ class HouseholdActivity {
     required this.timestamp,
     required this.details,
     required this.completedBy,
-    this.createdAt = '3/15/2026, 9:00am',
+    this.createdAt = '',
   });
 }
 
