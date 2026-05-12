@@ -6,6 +6,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/notification_bell.dart';
 import '../../../core/services/notification_service.dart';
+import '../theme/dashboard_chart_colors.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -25,15 +26,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   List<DashboardLegendItem> _personalItems = [];
   List<DashboardLegendItem> _householdItems = [];
-
-  final List<Color> _memberColors = const [
-    Color(0xFF8B63D2),
-    Color(0xFF4A2DE2),
-    Color(0xFF4965E0),
-    Color(0xFFAE4CC7),
-    Color(0xFFD9AB63),
-    Color(0xFF6FB2D9),
-  ];
 
   @override
   void initState() {
@@ -128,25 +120,25 @@ class _DashboardPageState extends State<DashboardPage> {
         label: 'Completed',
         value: completed.toDouble(),
         displayPercent: _percent(completed, personalChores.length),
-        color: const Color(0xFF8B63D2),
+        color: DashboardChartColors.completed,
       ),
       DashboardLegendItem(
-        label: 'Overdue To-do',
+        label: 'Overdue To-Do',
         value: overdueTodo.toDouble(),
         displayPercent: _percent(overdueTodo, personalChores.length),
-        color: const Color(0xFFBFBFBF),
+        color: DashboardChartColors.overdue,
       ),
       DashboardLegendItem(
-        label: 'To-do This Week',
+        label: 'To-Do This Week',
         value: todoThisWeek.toDouble(),
         displayPercent: _percent(todoThisWeek, personalChores.length),
-        color: const Color(0xFFD9AB63),
+        color: DashboardChartColors.todoThisWeek,
       ),
       DashboardLegendItem(
-        label: 'Future To-do',
+        label: 'Future To-Do',
         value: futureTodo.toDouble(),
         displayPercent: _percent(futureTodo, personalChores.length),
-        color: const Color(0xFF6FB2D9),
+        color: DashboardChartColors.futureTodo,
       ),
     ].where((item) => item.value > 0).toList();
 
@@ -172,7 +164,7 @@ class _DashboardPageState extends State<DashboardPage> {
       todoCountsByMember[name] = (todoCountsByMember[name] ?? 0) + 1;
     }
 
-    final memberNames = todoCountsByMember.keys.toList();
+    final memberNames = todoCountsByMember.keys.toList()..sort();
     final householdItems = <DashboardLegendItem>[];
 
     if (completedThisWeek > 0) {
@@ -181,21 +173,22 @@ class _DashboardPageState extends State<DashboardPage> {
           label: 'Completed',
           value: completedThisWeek.toDouble(),
           displayPercent: _percent(completedThisWeek, weeklyChores.length),
-          color: const Color(0xFF8B63D2),
+          color: DashboardChartColors.completed,
         ),
       );
     }
 
-    for (final name in memberNames) {
-      final index = memberNames.indexOf(name);
+    for (var index = 0; index < memberNames.length; index++) {
+      final name = memberNames[index];
       final count = todoCountsByMember[name] ?? 0;
 
       householdItems.add(
         DashboardLegendItem(
-          label: '$name To-do',
+          label: '$name To-Do',
           value: count.toDouble(),
           displayPercent: _percent(count, weeklyChores.length),
-          color: _memberColors[(index + 1) % _memberColors.length],
+          color: DashboardChartColors
+              .memberPalette[index % DashboardChartColors.memberPalette.length],
         ),
       );
     }
@@ -418,7 +411,7 @@ class DashboardSummaryCard extends StatelessWidget {
                               ? [
                                   PieChartSectionData(
                                     value: 1,
-                                    color: const Color(0xFFBFBFBF),
+                                    color: DashboardChartColors.empty,
                                     radius: 28,
                                     showTitle: false,
                                   ),
@@ -437,7 +430,7 @@ class DashboardSummaryCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Text(
-                            'Total Value',
+                            'Completed',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 13,
