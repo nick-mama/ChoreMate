@@ -3,11 +3,21 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/notification_models.dart';
 
 class NotificationService {
-  NotificationService._();
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
+
+  NotificationService._({FirebaseFirestore? db, FirebaseAuth? auth})
+    : _db = db ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
+
   static final instance = NotificationService._();
 
-  final _db = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  factory NotificationService.testing({
+    required FirebaseFirestore db,
+    required FirebaseAuth auth,
+  }) {
+    return NotificationService._(db: db, auth: auth);
+  }
 
   Stream<bool> hasUnreadNotificationsStream() {
     final user = _auth.currentUser;

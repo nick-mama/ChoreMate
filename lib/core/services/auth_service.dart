@@ -1,13 +1,19 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'auth_repository.dart';
 
-class AuthService {
-  final _auth = FirebaseAuth.instance;
-  final _db = FirebaseFirestore.instance;
+class AuthService implements AuthRepository {
+  final FirebaseAuth _auth;
+  final FirebaseFirestore _db;
+
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? db})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _db = db ?? FirebaseFirestore.instance;
 
   User? get currentUser => _auth.currentUser;
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
+  @override
   Future<UserCredential> login(String email, String password) async {
     final credential = await _auth.signInWithEmailAndPassword(
       email: email,
@@ -20,14 +26,11 @@ class AuthService {
   }
 
   Future<void> _syncDisplayNameIfMissing() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _auth.currentUser;
     if (user == null) return;
 
     if (user.displayName == null || user.displayName!.isEmpty) {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final doc = await _db.collection('users').doc(user.uid).get();
 
       final username = doc.data()?['username'];
 
@@ -38,6 +41,7 @@ class AuthService {
     }
   }
 
+  @override
   Future<void> signup({
     required String email,
     required String password,
@@ -76,10 +80,12 @@ class AuthService {
     return _auth.currentUser?.emailVerified ?? false;
   }
 
+  @override
   Future<void> sendPasswordResetEmail(String email) async {
     await _auth.sendPasswordResetEmail(email: email);
   }
 
+  @override
   Future<void> logout() async {
     await _auth.signOut();
   }

@@ -4,8 +4,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'notification_service.dart';
 
 class HouseholdService {
-  final _db = FirebaseFirestore.instance;
-  final _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
+  final NotificationService _notifications;
+
+  HouseholdService({
+    FirebaseFirestore? db,
+    FirebaseAuth? auth,
+    NotificationService? notificationService,
+  }) : _db = db ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _notifications = notificationService ?? NotificationService.instance;
 
   String get _uid => _auth.currentUser!.uid;
 
@@ -59,7 +68,7 @@ class HouseholdService {
       'householdId': householdDoc.id,
     });
 
-    await NotificationService.instance.createNewHouseholdMemberNotification(
+    await _notifications.createNewHouseholdMemberNotification(
       householdId: householdDoc.id,
       addedUserId: _uid,
       addedUserName: addedUserName,
@@ -96,7 +105,7 @@ class HouseholdService {
       'householdId': householdId,
     });
 
-    await NotificationService.instance.createNewHouseholdMemberNotification(
+    await _notifications.createNewHouseholdMemberNotification(
       householdId: householdId,
       addedUserId: invitedUid,
       addedUserName: addedUserName,

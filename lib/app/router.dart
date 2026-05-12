@@ -37,9 +37,9 @@ class AppRouter {
       case splash:
         return MaterialPageRoute(builder: (_) => const SplashPage());
       case login:
-        return MaterialPageRoute(builder: (_) => const LoginPage());
+        return MaterialPageRoute(builder: (_) => LoginPage());
       case signup:
-        return MaterialPageRoute(builder: (_) => const SignupPage());
+        return MaterialPageRoute(builder: (_) => SignupPage());
       case verify:
         return MaterialPageRoute(builder: (_) => const VerifyEmailPage());
       case householdSetup:

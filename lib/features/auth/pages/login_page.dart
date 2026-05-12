@@ -7,9 +7,12 @@ import '../../../../shared/widgets/primary_button.dart';
 import '../../../../shared/widgets/secondary_button.dart';
 import '../../../../app/router.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/auth_repository.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final AuthRepository auth;
+
+  LoginPage({super.key, AuthRepository? auth}) : auth = auth ?? AuthService();
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -18,11 +21,16 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
-  final _auth = AuthService();
+  late final AuthRepository _auth;
 
   bool showError = false;
   String errorMessage = '';
   bool loading = false;
+  @override
+  void initState() {
+    super.initState();
+    _auth = widget.auth;
+  }
 
   @override
   void dispose() {

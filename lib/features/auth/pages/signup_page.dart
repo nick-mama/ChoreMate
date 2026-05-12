@@ -7,9 +7,12 @@ import '../../../shared/widgets/app_text_field.dart';
 import '../../../shared/widgets/primary_button.dart';
 import '../../../../shared/widgets/secondary_button.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/auth_repository.dart';
 
 class SignupPage extends StatefulWidget {
-  const SignupPage({super.key});
+  final AuthRepository auth;
+
+  SignupPage({super.key, AuthRepository? auth}) : auth = auth ?? AuthService();
 
   @override
   State<SignupPage> createState() => _SignupPageState();
@@ -23,11 +26,17 @@ class _SignupPageState extends State<SignupPage> {
   final phoneController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-  final _auth = AuthService();
+  late final AuthRepository _auth;
 
   bool showError = false;
   String errorMessage = '';
   bool loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = widget.auth;
+  }
 
   @override
   void dispose() {
