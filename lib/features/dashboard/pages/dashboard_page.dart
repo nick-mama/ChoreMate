@@ -4,6 +4,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
+import '../../../shared/widgets/notification_bell.dart';
+import '../../../core/services/notification_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -70,6 +72,11 @@ class _DashboardPageState extends State<DashboardPage> {
           .get();
 
       householdName = householdDoc.data()?['name'] ?? 'Household';
+
+      await NotificationService.instance.checkChoreReminderNotifications(
+        householdId: householdId,
+        userId: user.uid,
+      );
     }
 
     final choresSnapshot = await FirebaseFirestore.instance
@@ -333,14 +340,14 @@ class _DashboardHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(
+      children: [
+        const Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
             child: AppLogo(type: LogoType.wordmark, width: 230),
           ),
         ),
-        Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.blue),
+        const NotificationBell(),
       ],
     );
   }

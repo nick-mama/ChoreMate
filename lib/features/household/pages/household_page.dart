@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
+import '../../../shared/widgets/notification_bell.dart';
 
 class HouseholdPage extends StatefulWidget {
   const HouseholdPage({super.key});
@@ -751,14 +752,14 @@ class _HouseholdHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(
+      children: [
+        const Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
             child: AppLogo(type: LogoType.wordmark, width: 230),
           ),
         ),
-        Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.text),
+        const NotificationBell(),
       ],
     );
   }

@@ -7,6 +7,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_logo.dart';
 import 'account_settings_page.dart';
+import '../../../shared/widgets/notification_bell.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -493,14 +494,14 @@ class _AccountHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        Expanded(
+      children: [
+        const Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
             child: AppLogo(type: LogoType.wordmark, width: 230),
           ),
         ),
-        Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.text),
+        const NotificationBell(),
       ],
     );
   }

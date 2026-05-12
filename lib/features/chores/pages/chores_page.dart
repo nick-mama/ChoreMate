@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
+import '../../../shared/widgets/notification_bell.dart';
+import '../../../core/services/notification_service.dart';
 
 class ChoresPage extends StatefulWidget {
   const ChoresPage({super.key});
@@ -60,6 +62,13 @@ class _ChoresPageState extends State<ChoresPage> {
       );
     }).toList();
 
+    if (householdId.toString().isNotEmpty) {
+      await NotificationService.instance.checkChoreReminderNotifications(
+        householdId: householdId,
+        userId: user.uid,
+      );
+    }
+
     if (!mounted) return;
 
     setState(() {
@@ -110,7 +119,7 @@ class _ChoresPageState extends State<ChoresPage> {
     required HouseholdMember? roommate,
     required bool recurring,
   }) async {
-    await _db.collection('chores').add({
+    final docRef = await _db.collection('chores').add({
       'householdId': _householdId,
       'name': name,
       'description': description,
@@ -124,6 +133,17 @@ class _ChoresPageState extends State<ChoresPage> {
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    // create notification if assigned to someone
+    if (roommate != null) {
+      await NotificationService.instance.createNewChoreAssignedNotification(
+        householdId: _householdId,
+        assignedToUserId: roommate.uid,
+        choreId: docRef.id,
+        choreName: name,
+        dueDate: dueDate,
+      );
+    }
   }
 
   Future<void> _updateChore(
@@ -747,10 +767,14 @@ class _ChoresHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
-        AppLogo(type: LogoType.wordmark, width: 230),
-        Spacer(),
-        Icon(Icons.notifications_none_rounded, size: 38, color: AppColors.text),
+      children: [
+        const Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: AppLogo(type: LogoType.wordmark, width: 230),
+          ),
+        ),
+        const NotificationBell(),
       ],
     );
   }
