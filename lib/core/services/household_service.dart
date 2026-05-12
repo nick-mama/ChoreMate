@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'notification_service.dart';
 
 class HouseholdService {
   final _db = FirebaseFirestore.instance;
@@ -42,6 +43,13 @@ class HouseholdService {
     }
 
     final householdDoc = query.docs.first;
+    final userDoc = await _db.collection('users').doc(_uid).get();
+    final userData = userDoc.data() ?? {};
+    final addedUserName =
+        userData['username'] ??
+        userData['email'] ??
+        _auth.currentUser?.email ??
+        'Someone';
 
     await householdDoc.reference.update({
       'members': FieldValue.arrayUnion([_uid]),
@@ -50,6 +58,12 @@ class HouseholdService {
     await _db.collection('users').doc(_uid).update({
       'householdId': householdDoc.id,
     });
+
+    await NotificationService.instance.createNewHouseholdMemberNotification(
+      householdId: householdDoc.id,
+      addedUserId: _uid,
+      addedUserName: addedUserName,
+    );
   }
 
   Future<void> inviteByEmail(String email, String householdId) async {
@@ -71,6 +85,9 @@ class HouseholdService {
       throw Exception('That user is already in a household.');
     }
 
+    final addedUserName =
+        invitedUser['username'] ?? invitedUser['email'] ?? 'Someone';
+
     await _db.collection('households').doc(householdId).update({
       'members': FieldValue.arrayUnion([invitedUid]),
     });
@@ -78,6 +95,12 @@ class HouseholdService {
     await _db.collection('users').doc(invitedUid).update({
       'householdId': householdId,
     });
+
+    await NotificationService.instance.createNewHouseholdMemberNotification(
+      householdId: householdId,
+      addedUserId: invitedUid,
+      addedUserName: addedUserName,
+    );
   }
 
   Future<String?> getCurrentHouseholdId() async {

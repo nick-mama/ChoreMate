@@ -117,6 +117,39 @@ class NotificationService {
     );
   }
 
+  Future<void> createNewHouseholdMemberNotification({
+    required String householdId,
+    required String addedUserId,
+    required String addedUserName,
+  }) async {
+    final householdDoc = await _db
+        .collection('households')
+        .doc(householdId)
+        .get();
+    final householdData = householdDoc.data();
+    if (householdData == null) return;
+
+    final members = List<String>.from(householdData['members'] ?? []);
+
+    for (final memberId in members) {
+      if (memberId == addedUserId) continue;
+
+      final settings = await settingsForUser(memberId);
+      if (!settings.newPeopleAdded || !settings.inApp) continue;
+
+      await _createNotification(
+        userId: memberId,
+        householdId: householdId,
+        type: 'newPersonAdded',
+        title: 'New household member',
+        body: '$addedUserName joined your household.',
+        choreId: null,
+        uniqueKey: 'newPersonAdded_${householdId}_$addedUserId',
+        settings: settings,
+      );
+    }
+  }
+
   Future<void> checkChoreReminderNotifications({
     required String householdId,
     required String userId,

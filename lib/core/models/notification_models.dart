@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class AppNotification {
   final String id;
   final String userId;
@@ -11,17 +9,31 @@ class AppNotification {
   final bool read;
   final DateTime? createdAt;
 
-  const AppNotification({
+  AppNotification({
     required this.id,
     required this.userId,
     required this.householdId,
     required this.type,
     required this.title,
     required this.body,
-    required this.choreId,
+    this.choreId,
     required this.read,
-    required this.createdAt,
+    this.createdAt,
   });
+
+  String get createdAtText {
+    if (createdAt == null) return '';
+
+    final now = DateTime.now();
+    final difference = now.difference(createdAt!);
+
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    if (difference.inDays < 7) return '${difference.inDays}d ago';
+
+    return '${createdAt!.month}/${createdAt!.day}/${createdAt!.year}';
+  }
 
   factory AppNotification.fromFirestore(String id, Map<String, dynamic> data) {
     return AppNotification(
@@ -29,33 +41,12 @@ class AppNotification {
       userId: data['userId'] ?? '',
       householdId: data['householdId'] ?? '',
       type: data['type'] ?? '',
-      title: data['title'] ?? 'Notification',
+      title: data['title'] ?? '',
       body: data['body'] ?? '',
       choreId: data['choreId'],
-      read: data['read'] == true,
-      createdAt: _readDate(data['createdAt']),
+      read: data['read'] ?? false,
+      createdAt: data['createdAt']?.toDate(),
     );
-  }
-
-  static DateTime? _readDate(dynamic value) {
-    if (value is Timestamp) return value.toDate();
-    if (value is DateTime) return value;
-    return null;
-  }
-
-  String get createdAtText {
-    if (createdAt == null) return '';
-
-    final hour = createdAt!.hour == 0
-        ? 12
-        : createdAt!.hour > 12
-        ? createdAt!.hour - 12
-        : createdAt!.hour;
-
-    final minute = createdAt!.minute.toString().padLeft(2, '0');
-    final period = createdAt!.hour >= 12 ? 'pm' : 'am';
-
-    return '${createdAt!.month}/${createdAt!.day}/${createdAt!.year}, $hour:$minute$period';
   }
 }
 
@@ -63,45 +54,32 @@ class NotificationSettings {
   final bool newChoreAssigned;
   final bool overdueChores;
   final bool upcomingDeadlines;
-  final bool newHouseholdMembers;
+  final bool newPeopleAdded;
   final bool inApp;
   final bool email;
   final bool banner;
 
   const NotificationSettings({
-    required this.newChoreAssigned,
-    required this.overdueChores,
-    required this.upcomingDeadlines,
-    required this.newHouseholdMembers,
-    required this.inApp,
-    required this.email,
-    required this.banner,
+    this.newChoreAssigned = true,
+    this.overdueChores = true,
+    this.upcomingDeadlines = true,
+    this.newPeopleAdded = true,
+    this.inApp = true,
+    this.email = false,
+    this.banner = true,
   });
 
-  factory NotificationSettings.defaults() {
-    return const NotificationSettings(
-      newChoreAssigned: true,
-      overdueChores: true,
-      upcomingDeadlines: true,
-      newHouseholdMembers: true,
-      inApp: true,
-      email: false,
-      banner: true,
-    );
-  }
-
-  factory NotificationSettings.fromMap(Map<String, dynamic>? data) {
-    final d = NotificationSettings.defaults();
-    if (data == null) return d;
+  factory NotificationSettings.fromMap(dynamic data) {
+    final map = data is Map ? data : {};
 
     return NotificationSettings(
-      newChoreAssigned: data['newChoreAssigned'] ?? d.newChoreAssigned,
-      overdueChores: data['overdueChores'] ?? d.overdueChores,
-      upcomingDeadlines: data['upcomingDeadlines'] ?? d.upcomingDeadlines,
-      newHouseholdMembers: data['newHouseholdMembers'] ?? d.newHouseholdMembers,
-      inApp: data['inApp'] ?? d.inApp,
-      email: data['email'] ?? d.email,
-      banner: data['banner'] ?? d.banner,
+      newChoreAssigned: map['newChoreAssigned'] ?? true,
+      overdueChores: map['overdueChores'] ?? true,
+      upcomingDeadlines: map['upcomingDeadlines'] ?? true,
+      newPeopleAdded: map['newPeopleAdded'] ?? true,
+      inApp: map['inApp'] ?? true,
+      email: map['email'] ?? false,
+      banner: map['banner'] ?? true,
     );
   }
 
@@ -110,30 +88,10 @@ class NotificationSettings {
       'newChoreAssigned': newChoreAssigned,
       'overdueChores': overdueChores,
       'upcomingDeadlines': upcomingDeadlines,
-      'newHouseholdMembers': newHouseholdMembers,
+      'newPeopleAdded': newPeopleAdded,
       'inApp': inApp,
       'email': email,
       'banner': banner,
     };
-  }
-
-  NotificationSettings copyWith({
-    bool? newChoreAssigned,
-    bool? overdueChores,
-    bool? upcomingDeadlines,
-    bool? newHouseholdMembers,
-    bool? inApp,
-    bool? email,
-    bool? banner,
-  }) {
-    return NotificationSettings(
-      newChoreAssigned: newChoreAssigned ?? this.newChoreAssigned,
-      overdueChores: overdueChores ?? this.overdueChores,
-      upcomingDeadlines: upcomingDeadlines ?? this.upcomingDeadlines,
-      newHouseholdMembers: newHouseholdMembers ?? this.newHouseholdMembers,
-      inApp: inApp ?? this.inApp,
-      email: email ?? this.email,
-      banner: banner ?? this.banner,
-    );
   }
 }

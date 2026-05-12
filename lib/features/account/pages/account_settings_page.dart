@@ -23,6 +23,16 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   String _email = '';
   String _startOfWeek = 'sunday';
 
+  Map<String, bool> _notificationSettings = {
+    'newChoreAssigned': true,
+    'overdueChores': true,
+    'upcomingDeadlines': true,
+    'newPeopleAdded': true,
+    'inApp': true,
+    'email': false,
+    'banner': true,
+  };
+
   @override
   void initState() {
     super.initState();
@@ -45,12 +55,23 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         .get(const GetOptions(source: Source.server));
 
     final data = doc.data() ?? {};
+    final savedNotificationSettings = data['notificationSettings'];
 
     if (!mounted) return;
     setState(() {
       _email = user.email ?? '';
       _usernameController.text = data['username'] ?? '';
       _startOfWeek = data['startOfWeek'] ?? 'sunday';
+
+      if (savedNotificationSettings is Map) {
+        _notificationSettings = {
+          ..._notificationSettings,
+          ...savedNotificationSettings.map(
+            (key, value) => MapEntry(key.toString(), value == true),
+          ),
+        };
+      }
+
       _loading = false;
     });
   }
@@ -104,6 +125,28 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       _showMessage('Could not update start of week.');
     } finally {
       if (mounted) setState(() => _savingStartOfWeek = false);
+    }
+  }
+
+  Future<void> _saveNotificationSetting(String key, bool value) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    setState(() {
+      _notificationSettings[key] = value;
+    });
+
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'notificationSettings': {key: value},
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _notificationSettings[key] = !value;
+      });
+      _showMessage('Could not update notification setting.');
     }
   }
 
@@ -298,6 +341,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  bool _setting(String key) {
+    return _notificationSettings[key] ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -406,6 +453,64 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   ),
                 ],
               ),
+              const SizedBox(height: 18),
+              _SettingsCard(
+                title: 'Notifications',
+                children: [
+                  const _SettingsSubsectionTitle('Notify me when...'),
+                  const SizedBox(height: 6),
+                  _NotificationSwitch(
+                    title: 'New chores assigned',
+                    value: _setting('newChoreAssigned'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('newChoreAssigned', value),
+                  ),
+                  _NotificationSwitch(
+                    title: 'Overdue chores',
+                    value: _setting('overdueChores'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('overdueChores', value),
+                  ),
+                  _NotificationSwitch(
+                    title: 'Upcoming deadlines',
+                    value: _setting('upcomingDeadlines'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('upcomingDeadlines', value),
+                  ),
+                  _NotificationSwitch(
+                    title: 'New people added to household',
+                    value: _setting('newPeopleAdded'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('newPeopleAdded', value),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  const _SettingsSubsectionTitle('Notification methods'),
+                  const SizedBox(height: 6),
+                  _NotificationSwitch(
+                    title: 'In-app',
+                    value: _setting('inApp'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('inApp', value),
+                  ),
+                  _NotificationSwitch(
+                    title: 'Email',
+                    subtitle: 'Email delivery requires backend support.',
+                    value: _setting('email'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('email', value),
+                  ),
+                  _NotificationSwitch(
+                    title: 'Banner',
+                    subtitle:
+                        'Banner delivery requires push or local notifications.',
+                    value: _setting('banner'),
+                    onChanged: (value) =>
+                        _saveNotificationSetting('banner', value),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -493,6 +598,49 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+class _NotificationSwitch extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _NotificationSwitch({
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      activeThumbColor: AppColors.tan,
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          color: AppColors.text,
+        ),
+      ),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.25,
+                color: AppColors.text,
+              ),
+            ),
+    );
+  }
+}
+
 class _SettingsButton extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -576,6 +724,24 @@ class _WeekOption extends StatelessWidget {
       title: Text(
         label,
         style: const TextStyle(fontSize: 15, color: AppColors.text),
+      ),
+    );
+  }
+}
+
+class _SettingsSubsectionTitle extends StatelessWidget {
+  final String text;
+
+  const _SettingsSubsectionTitle(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: AppColors.text,
       ),
     );
   }
