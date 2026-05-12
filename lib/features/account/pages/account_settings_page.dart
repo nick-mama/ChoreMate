@@ -1,6 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../app/theme/app_colors.dart';
 
 class AccountSettingsPage extends StatefulWidget {
@@ -13,15 +20,19 @@ class AccountSettingsPage extends StatefulWidget {
 class _AccountSettingsPageState extends State<AccountSettingsPage> {
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
+  final _storage = FirebaseStorage.instance;
+  final _picker = ImagePicker();
 
   final _usernameController = TextEditingController();
 
   bool _loading = true;
   bool _savingUsername = false;
   bool _savingStartOfWeek = false;
+  bool _savingPhoto = false;
 
   String _email = '';
   String _startOfWeek = 'sunday';
+  String _photoUrl = '';
 
   Map<String, bool> _notificationSettings = {
     'newChoreAssigned': true,
@@ -62,6 +73,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       _email = user.email ?? '';
       _usernameController.text = data['username'] ?? '';
       _startOfWeek = data['startOfWeek'] ?? 'sunday';
+      _photoUrl = data['photoUrl'] ?? '';
 
       if (savedNotificationSettings is Map) {
         _notificationSettings = {
@@ -74,6 +86,161 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
       _loading = false;
     });
+  }
+
+  Future<void> _changeProfilePhoto() async {
+    final user = _auth.currentUser;
+    if (user == null || _savingPhoto) return;
+
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.muted,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Choose Profile Picture',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.photo_library_outlined,
+                    color: AppColors.tan,
+                  ),
+                  title: const Text(
+                    'Photo Library',
+                    style: TextStyle(color: AppColors.text),
+                  ),
+                  onTap: () => Navigator.pop(context, ImageSource.gallery),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.photo_camera_outlined,
+                    color: AppColors.tan,
+                  ),
+                  title: const Text(
+                    'Camera',
+                    style: TextStyle(color: AppColors.text),
+                  ),
+                  onTap: () => Navigator.pop(context, ImageSource.camera),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) return;
+
+    final pickedFile = await _picker.pickImage(
+      source: source,
+      imageQuality: 85,
+    );
+
+    if (pickedFile == null) return;
+
+    final croppedFile = await ImageCropper().cropImage(
+      sourcePath: pickedFile.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Crop Profile Picture',
+          toolbarColor: AppColors.tan,
+          toolbarWidgetColor: Colors.white,
+          lockAspectRatio: true,
+        ),
+        IOSUiSettings(
+          title: 'Crop Profile Picture',
+          aspectRatioLockEnabled: true,
+        ),
+      ],
+    );
+
+    if (croppedFile == null) return;
+
+    setState(() => _savingPhoto = true);
+
+    try {
+      final ref = _storage.ref().child(
+        'profilePictures/${user.uid}/profile.jpg',
+      );
+
+      await ref.putFile(
+        File(croppedFile.path),
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      final url = await ref.getDownloadURL();
+
+      await _firestore.collection('users').doc(user.uid).update({
+        'photoUrl': url,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      setState(() => _photoUrl = url);
+
+      _showMessage('Profile picture updated.');
+    } catch (e) {
+      debugPrint('Upload error: $e');
+      _showMessage('Upload failed.');
+    } finally {
+      if (mounted) setState(() => _savingPhoto = false);
+    }
+  }
+
+  Future<void> _removeProfilePhoto() async {
+    final user = _auth.currentUser;
+    if (user == null || _savingPhoto) return;
+
+    setState(() => _savingPhoto = true);
+
+    try {
+      await _firestore.collection('users').doc(user.uid).update({
+        'photoUrl': FieldValue.delete(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      try {
+        await _storage
+            .ref()
+            .child('profilePictures/${user.uid}/profile.jpg')
+            .delete();
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() => _photoUrl = '');
+
+      _showMessage('Profile picture removed.');
+    } catch (_) {
+      _showMessage('Could not remove profile picture.');
+    } finally {
+      if (mounted) setState(() => _savingPhoto = false);
+    }
   }
 
   Future<void> _saveUsername() async {
@@ -406,6 +573,17 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               _SettingsCard(
                 title: 'Profile',
                 children: [
+                  Center(
+                    child: _ProfilePhotoPicker(
+                      photoUrl: _photoUrl,
+                      saving: _savingPhoto,
+                      onChangePhoto: _changeProfilePhoto,
+                      onRemovePhoto: _photoUrl.isEmpty
+                          ? null
+                          : _removeProfilePhoto,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   TextField(
                     controller: _usernameController,
                     decoration: InputDecoration(
@@ -483,9 +661,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     onChanged: (value) =>
                         _saveNotificationSetting('newPeopleAdded', value),
                   ),
-
                   const SizedBox(height: 18),
-
                   const _SettingsSubsectionTitle('Notification methods'),
                   const SizedBox(height: 6),
                   _NotificationSwitch(
@@ -531,6 +707,75 @@ class _DialogField {
     this.obscureText = false,
     this.keyboardType,
   });
+}
+
+class _ProfilePhotoPicker extends StatelessWidget {
+  final String photoUrl;
+  final bool saving;
+  final VoidCallback onChangePhoto;
+  final VoidCallback? onRemovePhoto;
+
+  const _ProfilePhotoPicker({
+    required this.photoUrl,
+    required this.saving,
+    required this.onChangePhoto,
+    required this.onRemovePhoto,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 126,
+          height: 126,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.tan, width: 8),
+          ),
+          child: ClipRRect(
+            child: photoUrl.isEmpty
+                ? const Center(
+                    child: Icon(
+                      Icons.person_outline,
+                      size: 56,
+                      color: AppColors.tan,
+                    ),
+                  )
+                : CachedNetworkImage(
+                    imageUrl: photoUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (_, _) => const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    errorWidget: (_, _, _) => const Center(
+                      child: Icon(
+                        Icons.person_outline,
+                        size: 56,
+                        color: AppColors.tan,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _PrimaryButton(
+          label: saving ? 'Saving...' : 'Change Profile Picture',
+          onTap: saving ? null : onChangePhoto,
+        ),
+        if (onRemovePhoto != null) ...[
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: saving ? null : onRemovePhoto,
+            child: const Text(
+              'Remove Profile Picture',
+              style: TextStyle(color: AppColors.text),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _SettingsCard extends StatelessWidget {

@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../app/theme/app_colors.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/notification_bell.dart';
@@ -111,6 +113,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
       final firstName = (data['firstName'] as String?) ?? '';
       final lastName = (data['lastName'] as String?) ?? '';
       final username = (data['username'] as String?) ?? '';
+      final photoUrl = (data['photoUrl'] as String?) ?? '';
 
       loaded.add(
         Housemate(
@@ -118,6 +121,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
           firstName: firstName.isNotEmpty ? firstName : uid,
           lastName: lastName,
           username: username,
+          photoUrl: photoUrl,
         ),
       );
     }
@@ -661,11 +665,7 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
                       child: AppLogo(type: LogoType.wordmark, width: 200),
                     ),
                   ),
-                  const Icon(
-                    Icons.notifications_none_rounded,
-                    size: 38,
-                    color: AppColors.text,
-                  ),
+                  const NotificationBell(),
                 ],
               ),
             ),
@@ -674,7 +674,7 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
                 padding: EdgeInsets.fromLTRB(
                   20,
                   28,
-                  10,
+                  20,
                   28 + MediaQuery.of(context).padding.bottom,
                 ),
                 child: Column(
@@ -818,7 +818,7 @@ class _HousemateCard extends StatelessWidget {
         width: 125,
         child: Column(
           children: [
-            ProfileAvatar(imagePath: housemate.imagePath, size: 106),
+            ProfileAvatar(photoUrl: housemate.photoUrl, size: 106),
             const SizedBox(height: 10),
             Text(
               housemate.firstName,
@@ -1000,21 +1000,10 @@ class _HousemateProfileSection extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.tan, width: 8),
-              ),
-              child: housemate.imagePath != null
-                  ? Image.asset(housemate.imagePath!, fit: BoxFit.cover)
-                  : const Center(
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 54,
-                        color: AppColors.tan,
-                      ),
-                    ),
+            ProfileAvatar(
+              photoUrl: housemate.photoUrl,
+              size: 120,
+              borderWidth: 8,
             ),
             const SizedBox(width: 18),
             Expanded(
@@ -1458,30 +1447,50 @@ class _StatItem {
 }
 
 class ProfileAvatar extends StatelessWidget {
-  final String? imagePath;
+  final String photoUrl;
   final double size;
+  final double borderWidth;
 
-  const ProfileAvatar({super.key, this.imagePath, this.size = 100});
+  const ProfileAvatar({
+    super.key,
+    required this.photoUrl,
+    this.size = 100,
+    this.borderWidth = 0,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final avatar = photoUrl.isEmpty
+        ? _defaultIcon()
+        : CachedNetworkImage(
+            imageUrl: photoUrl,
+            fit: BoxFit.cover,
+            placeholder: (_, _) =>
+                const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            errorWidget: (_, _, _) => _defaultIcon(),
+          );
+
     return Container(
       width: size,
       height: size,
-      color: Colors.grey.shade300,
-      alignment: Alignment.center,
-      child: imagePath != null
-          ? Image.asset(
-              imagePath!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _defaultIcon(),
-            )
-          : _defaultIcon(),
+      decoration: BoxDecoration(
+        border: borderWidth > 0
+            ? Border.all(color: AppColors.tan, width: borderWidth)
+            : null,
+        color: Colors.grey.shade300,
+      ),
+      child: ClipRRect(child: avatar),
     );
   }
 
   Widget _defaultIcon() {
-    return Icon(Icons.person, size: size * 0.4, color: Colors.grey.shade600);
+    return Center(
+      child: Icon(
+        Icons.person_outline,
+        size: size * 0.45,
+        color: AppColors.tan,
+      ),
+    );
   }
 }
 
@@ -1489,15 +1498,15 @@ class Housemate {
   final String uid;
   final String firstName;
   final String lastName;
-  final String? imagePath;
   final String username;
+  final String photoUrl;
 
   const Housemate({
     required this.uid,
     required this.firstName,
     this.lastName = '',
-    this.imagePath,
     this.username = '',
+    this.photoUrl = '',
   });
 
   String get fullName => '$firstName $lastName'.trim();

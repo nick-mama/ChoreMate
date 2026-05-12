@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/services/auth_service.dart';
@@ -25,6 +27,7 @@ class _AccountPageState extends State<AccountPage> {
   String _displayName = '';
   String _username = '';
   String _householdName = '';
+  String _photoUrl = '';
 
   int _housemates = 0;
   int _choresDone = 0;
@@ -65,6 +68,7 @@ class _AccountPageState extends State<AccountPage> {
     final username = data['username'] ?? '';
     final householdId = data['householdId'] ?? '';
     final startOfWeek = data['startOfWeek'] ?? 'sunday';
+    final photoUrl = data['photoUrl'] ?? '';
 
     String householdName = '';
 
@@ -88,6 +92,7 @@ class _AccountPageState extends State<AccountPage> {
       _displayName = '$firstName $lastName'.trim();
       _username = username;
       _householdName = householdName;
+      _photoUrl = photoUrl;
 
       individualValues = accountData.individualValues;
       householdValues = accountData.householdValues;
@@ -328,6 +333,7 @@ class _AccountPageState extends State<AccountPage> {
                       displayName: _displayName,
                       username: _username,
                       householdName: _householdName,
+                      photoUrl: _photoUrl,
                       onSettings: _openSettings,
                       onShare: _shareChoreMate,
                       onSignOut: _signOut,
@@ -511,6 +517,7 @@ class _ProfileSection extends StatelessWidget {
   final String displayName;
   final String username;
   final String householdName;
+  final String photoUrl;
   final VoidCallback onSettings;
   final VoidCallback onShare;
   final VoidCallback onSignOut;
@@ -519,6 +526,7 @@ class _ProfileSection extends StatelessWidget {
     required this.displayName,
     required this.username,
     required this.householdName,
+    required this.photoUrl,
     required this.onSettings,
     required this.onShare,
     required this.onSignOut,
@@ -532,7 +540,7 @@ class _ProfileSection extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _ProfileAvatarBox(),
+            _ProfileAvatarBox(photoUrl: photoUrl),
             const SizedBox(width: 18),
             Expanded(
               child: Column(
@@ -596,7 +604,9 @@ class _ProfileSection extends StatelessWidget {
 }
 
 class _ProfileAvatarBox extends StatelessWidget {
-  const _ProfileAvatarBox();
+  final String photoUrl;
+
+  const _ProfileAvatarBox({required this.photoUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -606,8 +616,29 @@ class _ProfileAvatarBox extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.tan, width: 8),
       ),
-      child: const Center(
-        child: Icon(Icons.person_outline, size: 54, color: AppColors.tan),
+      child: ClipRRect(
+        child: photoUrl.isEmpty
+            ? const Center(
+                child: Icon(
+                  Icons.person_outline,
+                  size: 54,
+                  color: AppColors.tan,
+                ),
+              )
+            : CachedNetworkImage(
+                imageUrl: photoUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, _) => const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                errorWidget: (_, _, _) => const Center(
+                  child: Icon(
+                    Icons.person_outline,
+                    size: 54,
+                    color: AppColors.tan,
+                  ),
+                ),
+              ),
       ),
     );
   }
