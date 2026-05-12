@@ -33,6 +33,7 @@ class _AccountPageState extends State<AccountPage> {
   int _choresDone = 0;
   int _totalChores = 0;
   int _uniqueChores = 0;
+  int _maxChoresInAWeek = 0;
   int _choreStreak = 0;
 
   List<double> individualValues = [0, 0, 0, 0];
@@ -102,6 +103,7 @@ class _AccountPageState extends State<AccountPage> {
       _choresDone = accountData.choresDone;
       _totalChores = accountData.totalChores;
       _uniqueChores = accountData.uniqueChores;
+      _maxChoresInAWeek = accountData.maxChoresInAWeek;
       _choreStreak = accountData.choreStreak;
 
       _loading = false;
@@ -225,6 +227,10 @@ class _AccountPageState extends State<AccountPage> {
       }
     }
 
+    final maxChoresInAWeek = individualCounts.isEmpty
+        ? 0
+        : individualCounts.reduce((a, b) => a > b ? a : b).toInt();
+
     return _AccountData(
       individualValues: individualCounts,
       householdValues: householdCounts,
@@ -233,6 +239,7 @@ class _AccountPageState extends State<AccountPage> {
       choresDone: choresDone,
       totalChores: totalChores,
       uniqueChores: uniqueNames.length,
+      maxChoresInAWeek: maxChoresInAWeek,
       choreStreak: completedWeeks.length,
     );
   }
@@ -395,6 +402,7 @@ class _AccountPageState extends State<AccountPage> {
                       choresDone: _choresDone,
                       totalChores: _totalChores,
                       uniqueChores: _uniqueChores,
+                      maxChoresInAWeek: _maxChoresInAWeek,
                       choreStreak: _choreStreak,
                     ),
                   ],
@@ -440,6 +448,7 @@ class _AccountData {
   final int choresDone;
   final int totalChores;
   final int uniqueChores;
+  final int maxChoresInAWeek;
   final int choreStreak;
 
   const _AccountData({
@@ -450,6 +459,7 @@ class _AccountData {
     required this.choresDone,
     required this.totalChores,
     required this.uniqueChores,
+    required this.maxChoresInAWeek,
     required this.choreStreak,
   });
 
@@ -462,6 +472,7 @@ class _AccountData {
       choresDone: 0,
       totalChores: 0,
       uniqueChores: 0,
+      maxChoresInAWeek: 0,
       choreStreak: 0,
     );
   }
@@ -878,6 +889,7 @@ class _StatsGrid extends StatelessWidget {
   final int choresDone;
   final int totalChores;
   final int uniqueChores;
+  final int maxChoresInAWeek;
   final int choreStreak;
 
   const _StatsGrid({
@@ -885,6 +897,7 @@ class _StatsGrid extends StatelessWidget {
     required this.choresDone,
     required this.totalChores,
     required this.uniqueChores,
+    required this.maxChoresInAWeek,
     required this.choreStreak,
   });
 
@@ -895,12 +908,12 @@ class _StatsGrid extends StatelessWidget {
       _StatItem(value: '$choresDone', label: 'Chores Done'),
       _StatItem(value: '$totalChores', label: 'Total Chores'),
       _StatItem(value: '$uniqueChores', label: 'Unique Chores'),
+      _StatItem(value: '$maxChoresInAWeek', label: 'Max Chores\nin a Week'),
       _StatItem(
         value: '$choreStreak',
         valueSuffix: '\nweeks',
         label: 'Chore Streak',
       ),
-      const _StatItem(value: '', label: '', isPlaceholder: true),
     ];
 
     return GridView.builder(
@@ -918,52 +931,45 @@ class _StatsGrid extends StatelessWidget {
 
         return Container(
           decoration: BoxDecoration(
-            color: stat.isPlaceholder
-                ? const Color(0xFFD9D9D9)
-                : AppColors.cream,
+            color: AppColors.cream,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: stat.isPlaceholder
-              ? const SizedBox.expand()
-              : Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
                   children: [
-                    RichText(
-                      textAlign: TextAlign.center,
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: stat.value,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.text,
-                            ),
-                          ),
-                          if (stat.valueSuffix != null)
-                            TextSpan(
-                              text: ' ${stat.valueSuffix}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.text,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      stat.label,
-                      textAlign: TextAlign.center,
+                    TextSpan(
+                      text: stat.value,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.text,
                       ),
                     ),
+                    if (stat.valueSuffix != null)
+                      TextSpan(
+                        text: ' ${stat.valueSuffix}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.text,
+                        ),
+                      ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                stat.label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: AppColors.text),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -974,12 +980,6 @@ class _StatItem {
   final String value;
   final String label;
   final String? valueSuffix;
-  final bool isPlaceholder;
 
-  const _StatItem({
-    required this.value,
-    required this.label,
-    this.valueSuffix,
-    this.isPlaceholder = false,
-  });
+  const _StatItem({required this.value, required this.label, this.valueSuffix});
 }

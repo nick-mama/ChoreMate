@@ -457,6 +457,7 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
   int choresDone = 0;
   int totalChores = 0;
   int uniqueChores = 0;
+  int maxChoresInAWeek = 0;
   int choreStreak = 0;
 
   @override
@@ -550,6 +551,10 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
       weeklyCounts[weekIndex] += 1;
     }
 
+    final maxWeeklyChores = weeklyCounts.isEmpty
+        ? 0
+        : weeklyCounts.reduce((a, b) => a > b ? a : b).toInt();
+
     history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     if (!mounted) return;
@@ -560,6 +565,7 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
       choresDone = completedCount;
       totalChores = assignedCount;
       uniqueChores = uniqueNames.length;
+      maxChoresInAWeek = maxWeeklyChores;
       choreStreak = completedWeeks.length;
       _loading = false;
     });
@@ -733,6 +739,7 @@ class _HousemateProfilePageState extends State<HousemateProfilePage> {
                       choresDone: choresDone,
                       totalChores: totalChores,
                       uniqueChores: uniqueChores,
+                      maxChoresInAWeek: maxChoresInAWeek,
                       choreStreak: choreStreak,
                     ),
                   ],
@@ -1317,12 +1324,14 @@ class _HousemateStatsGrid extends StatelessWidget {
   final int choresDone;
   final int totalChores;
   final int uniqueChores;
+  final int maxChoresInAWeek;
   final int choreStreak;
 
   const _HousemateStatsGrid({
     required this.choresDone,
     required this.totalChores,
     required this.uniqueChores,
+    required this.maxChoresInAWeek,
     required this.choreStreak,
   });
 
@@ -1332,12 +1341,12 @@ class _HousemateStatsGrid extends StatelessWidget {
       _StatItem(value: '$choresDone', label: 'Chores Done'),
       _StatItem(value: '$totalChores', label: 'Total Chores'),
       _StatItem(value: '$uniqueChores', label: 'Unique Chores'),
+      _StatItem(value: '$maxChoresInAWeek', label: 'Max Chores\nin a Week'),
       _StatItem(
         value: '$choreStreak',
         valueSuffix: '\nweeks',
         label: 'Chore Streak',
       ),
-      const _StatItem(value: '', label: '', isPlaceholder: true),
       const _StatItem(value: '', label: '', isPlaceholder: true),
     ];
 
