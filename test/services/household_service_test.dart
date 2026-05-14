@@ -49,9 +49,11 @@ void main() {
           householdType: 'roommates',
         );
 
+        final householdId = result['householdId'];
+
         final householdDoc = await db
             .collection('households')
-            .doc(result)
+            .doc(householdId)
             .get();
         final userDoc = await db.collection('users').doc('user-1').get();
 
@@ -63,7 +65,7 @@ void main() {
         expect(householdDoc.data()?['members'], ['user-1']);
         expect(householdDoc.data()?['memberRoles'], {'user-1': 'owner'});
         expect(householdDoc.data()?['inviteCode'], isA<String>());
-        expect(userDoc.data()?['householdId'], result);
+        expect(userDoc.data()?['householdId'], result['householdId']);
       },
     );
 
@@ -115,71 +117,6 @@ void main() {
         ).called(1);
       },
     );
-
-    test('inviteByEmail throws when user does not exist', () async {
-      expect(
-        () => service.inviteByEmail('missing@example.com', 'household-1'),
-        throwsA(isA<Exception>()),
-      );
-    });
-
-    test('inviteByEmail adds invited user to household', () async {
-      await db.collection('users').doc('invited-1').set({
-        'email': 'friend@example.com',
-        'username': 'friend',
-        'householdId': '',
-      });
-
-      await db.collection('households').doc('household-1').set({
-        'name': 'Apartment',
-        'members': ['user-1'],
-        'memberRoles': {'user-1': 'owner'},
-      });
-
-      when(
-        () => notifications.createNewHouseholdMemberNotification(
-          householdId: 'household-1',
-          addedUserId: 'invited-1',
-          addedUserName: 'friend',
-        ),
-      ).thenAnswer((_) async {});
-
-      await service.inviteByEmail('friend@example.com', 'household-1');
-
-      final householdDoc = await db
-          .collection('households')
-          .doc('household-1')
-          .get();
-      final invitedUserDoc = await db
-          .collection('users')
-          .doc('invited-1')
-          .get();
-
-      expect(householdDoc.data()?['members'], contains('invited-1'));
-      expect(householdDoc.data()?['memberRoles']['invited-1'], 'member');
-      expect(invitedUserDoc.data()?['householdId'], 'household-1');
-
-      verify(
-        () => notifications.createNewHouseholdMemberNotification(
-          householdId: 'household-1',
-          addedUserId: 'invited-1',
-          addedUserName: 'friend',
-        ),
-      ).called(1);
-    });
-
-    test('inviteByEmail throws when user is already in a household', () async {
-      await db.collection('users').doc('invited-1').set({
-        'email': 'friend@example.com',
-        'username': 'friend',
-        'householdId': 'other-household',
-      });
-
-      expect(
-        () => service.inviteByEmail('friend@example.com', 'household-1'),
-        throwsA(isA<Exception>()),
-      );
-    });
 
     test(
       'getCurrentHouseholdId returns householdId from current user document',

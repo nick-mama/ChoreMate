@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:choremate/features/auth/pages/login_page.dart';
 import 'package:choremate/core/services/auth_repository.dart';
+import 'package:choremate/app/router.dart';
 
 class MockUserCredential extends Mock implements UserCredential {}
 
@@ -58,18 +59,18 @@ class FakeAuthService implements AuthRepository {
 }
 
 void main() {
-  testWidgets('trims email but not password when logging in', (tester) async {
+  testWidgets('trims login input but not password', (tester) async {
     final auth = FakeAuthService();
 
     await tester.pumpWidget(
       MaterialApp(
         home: LoginPage(auth: auth),
-        routes: {'/splash': (_) => const Scaffold(body: Text('Splash'))},
+        routes: {AppRouter.splash: (_) => const Scaffold(body: Text('Splash'))},
       ),
     );
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
+      find.widgetWithText(TextField, 'Username or Email'),
       ' test@email.com ',
     );
     await tester.enterText(
@@ -84,8 +85,10 @@ void main() {
     expect(auth.password, ' password ');
   });
 
-  testWidgets('goes to splash when email is verified', (tester) async {
-    final auth = FakeAuthService()..emailVerified = true;
+  testWidgets('passes username login input through auth service', (
+    tester,
+  ) async {
+    final auth = FakeAuthService();
 
     await tester.pumpWidget(
       MaterialApp(
@@ -95,7 +98,36 @@ void main() {
     );
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
+      find.widgetWithText(TextField, 'Username or Email'),
+      ' cleanqueen ',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password',
+    );
+
+    await tester.tap(find.text('Log In'));
+    await tester.pumpAndSettle();
+
+    expect(auth.email, 'cleanqueen');
+    expect(auth.password, 'password');
+  });
+
+  testWidgets('goes to splash when email is verified', (tester) async {
+    final auth = FakeAuthService()..emailVerified = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: '/login',
+        routes: {
+          '/login': (_) => LoginPage(auth: auth),
+          AppRouter.splash: (_) => const Scaffold(body: Text('Splash')),
+        },
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username or Email'),
       'test@email.com',
     );
     await tester.enterText(
@@ -106,6 +138,7 @@ void main() {
     await tester.tap(find.text('Log In'));
     await tester.pumpAndSettle();
 
+    expect(auth.email, 'test@email.com');
     expect(find.text('Splash'), findsOneWidget);
     expect(auth.verificationEmailSent, isFalse);
   });
@@ -119,13 +152,13 @@ void main() {
         MaterialApp(
           home: LoginPage(auth: auth),
           routes: {
-            '/verify': (_) => const Scaffold(body: Text('Verify Email')),
+            AppRouter.verify: (_) => const Scaffold(body: Text('Verify Email')),
           },
         ),
       );
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Email'),
+        find.widgetWithText(TextField, 'Username or Email'),
         'test@email.com',
       );
       await tester.enterText(
@@ -141,6 +174,30 @@ void main() {
     },
   );
 
+  testWidgets('shows friendly error when account is not found', (tester) async {
+    final auth = FakeAuthService()
+      ..loginException = FirebaseAuthException(code: 'account-not-found');
+
+    await tester.pumpWidget(MaterialApp(home: LoginPage(auth: auth)));
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username or Email'),
+      'missing_user',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password',
+    );
+
+    await tester.tap(find.text('Log In'));
+    await tester.pump();
+
+    expect(
+      find.text('There is no account for that username/email.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows friendly error for invalid credentials', (tester) async {
     final auth = FakeAuthService()
       ..loginException = FirebaseAuthException(code: 'invalid-credential');
@@ -148,7 +205,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: LoginPage(auth: auth)));
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
+      find.widgetWithText(TextField, 'Username or Email'),
       'test@email.com',
     );
     await tester.enterText(
@@ -159,7 +216,7 @@ void main() {
     await tester.tap(find.text('Log In'));
     await tester.pump();
 
-    expect(find.text('Incorrect email or password.'), findsOneWidget);
+    expect(find.text('Incorrect password.'), findsOneWidget);
   });
 
   testWidgets('shows friendly error for too many attempts', (tester) async {
@@ -169,7 +226,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: LoginPage(auth: auth)));
 
     await tester.enterText(
-      find.widgetWithText(TextField, 'Email'),
+      find.widgetWithText(TextField, 'Username or Email'),
       'test@email.com',
     );
     await tester.enterText(

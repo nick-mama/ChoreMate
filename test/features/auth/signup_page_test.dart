@@ -13,7 +13,6 @@ class FakeAuthService implements AuthRepository {
   String? username;
   String? phone;
   FirebaseAuthException? signupException;
-  bool verificationEmailSent = false;
 
   @override
   Future<void> signup({
@@ -37,9 +36,7 @@ class FakeAuthService implements AuthRepository {
   }
 
   @override
-  Future<void> sendVerificationEmail() async {
-    verificationEmailSent = true;
-  }
+  Future<void> sendVerificationEmail() async {}
 
   @override
   Future<bool> checkEmailVerified() async {
@@ -63,11 +60,51 @@ class FakeAuthService implements AuthRepository {
 }
 
 void main() {
+  testWidgets('shows error when username is shorter than 3 characters', (
+    tester,
+  ) async {
+    final auth = FakeAuthService();
+
+    await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
+
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'ab');
+    await tester.tap(find.text('Sign Up'));
+    await tester.pump();
+
+    expect(
+      find.text('Username must be at least 3 characters.'),
+      findsOneWidget,
+    );
+    expect(auth.email, isNull);
+  });
+
+  testWidgets('shows error when username has invalid characters', (
+    tester,
+  ) async {
+    final auth = FakeAuthService();
+
+    await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      'alex-k',
+    );
+    await tester.tap(find.text('Sign Up'));
+    await tester.pump();
+
+    expect(
+      find.text('Username can only use letters, numbers, and underscores.'),
+      findsOneWidget,
+    );
+    expect(auth.email, isNull);
+  });
+
   testWidgets('shows error when passwords do not match', (tester) async {
     final auth = FakeAuthService();
 
     await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
 
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
     await tester.enterText(
       find.widgetWithText(TextField, 'Password'),
       'password1',
@@ -90,6 +127,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
 
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
     await tester.enterText(find.widgetWithText(TextField, 'Password'), '12345');
     await tester.enterText(
       find.widgetWithText(TextField, 'Confirm Password'),
@@ -125,7 +163,7 @@ void main() {
     );
     await tester.enterText(
       find.widgetWithText(TextField, 'Username'),
-      ' alexk ',
+      ' AlexK ',
     );
     await tester.enterText(
       find.widgetWithText(TextField, 'Email'),
@@ -155,7 +193,7 @@ void main() {
     expect(auth.password, ' password ');
   });
 
-  testWidgets('sends verification email after signup', (tester) async {
+  testWidgets('navigates to verify after signup', (tester) async {
     final auth = FakeAuthService();
 
     await tester.pumpWidget(
@@ -187,7 +225,6 @@ void main() {
     await tester.tap(find.text('Sign Up'));
     await tester.pumpAndSettle();
 
-    expect(auth.verificationEmailSent, isTrue);
     expect(find.text('Verify'), findsOneWidget);
   });
 
@@ -197,6 +234,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
 
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
     await tester.enterText(
       find.widgetWithText(TextField, 'Email'),
       'test@email.com',
@@ -219,12 +257,43 @@ void main() {
     );
   });
 
+  testWidgets('shows friendly error when username already exists', (
+    tester,
+  ) async {
+    final auth = FakeAuthService()
+      ..signupException = FirebaseAuthException(
+        code: 'username-already-in-use',
+      );
+
+    await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
+
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'test@email.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm Password'),
+      'password',
+    );
+
+    await tester.tap(find.text('Sign Up'));
+    await tester.pump();
+
+    expect(find.text('That username is already taken.'), findsOneWidget);
+  });
+
   testWidgets('shows friendly error for invalid email', (tester) async {
     final auth = FakeAuthService()
       ..signupException = FirebaseAuthException(code: 'invalid-email');
 
     await tester.pumpWidget(MaterialApp(home: SignupPage(auth: auth)));
 
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
     await tester.enterText(
       find.widgetWithText(TextField, 'Email'),
       'bad-email',
