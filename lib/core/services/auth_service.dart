@@ -72,10 +72,12 @@ class AuthService implements AuthRepository {
     await credential.user!.sendEmailVerification();
   }
 
+  @override
   Future<void> sendVerificationEmail() async {
     await _auth.currentUser?.sendEmailVerification();
   }
 
+  @override
   Future<bool> checkEmailVerified() async {
     await _auth.currentUser?.reload();
     return _auth.currentUser?.emailVerified ?? false;

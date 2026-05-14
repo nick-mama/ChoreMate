@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:choremate/features/auth/pages/signup_page.dart';
 import 'package:choremate/core/services/auth_repository.dart';
 
@@ -12,6 +13,7 @@ class FakeAuthService implements AuthRepository {
   String? username;
   String? phone;
   FirebaseAuthException? signupException;
+  bool verificationEmailSent = false;
 
   @override
   Future<void> signup({
@@ -32,6 +34,16 @@ class FakeAuthService implements AuthRepository {
     if (signupException != null) {
       throw signupException!;
     }
+  }
+
+  @override
+  Future<void> sendVerificationEmail() async {
+    verificationEmailSent = true;
+  }
+
+  @override
+  Future<bool> checkEmailVerified() async {
+    return false;
   }
 
   @override
@@ -141,6 +153,42 @@ void main() {
     expect(auth.email, 'alex@email.com');
     expect(auth.phone, '5551234567');
     expect(auth.password, ' password ');
+  });
+
+  testWidgets('sends verification email after signup', (tester) async {
+    final auth = FakeAuthService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SignupPage(auth: auth),
+        routes: {'/verify': (_) => const Scaffold(body: Text('Verify'))},
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'First Name'),
+      'Alex',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Last Name'), 'Kim');
+    await tester.enterText(find.widgetWithText(TextField, 'Username'), 'alexk');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'alex@email.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm Password'),
+      'password',
+    );
+
+    await tester.tap(find.text('Sign Up'));
+    await tester.pumpAndSettle();
+
+    expect(auth.verificationEmailSent, isTrue);
+    expect(find.text('Verify'), findsOneWidget);
   });
 
   testWidgets('shows friendly error when email already exists', (tester) async {

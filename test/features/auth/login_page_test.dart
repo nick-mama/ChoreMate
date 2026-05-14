@@ -13,6 +13,8 @@ class FakeAuthService implements AuthRepository {
   String? password;
   String? resetEmail;
   FirebaseAuthException? loginException;
+  bool emailVerified = true;
+  bool verificationEmailSent = false;
 
   @override
   Future<UserCredential> login(String email, String password) async {
@@ -24,6 +26,16 @@ class FakeAuthService implements AuthRepository {
     }
 
     return MockUserCredential();
+  }
+
+  @override
+  Future<bool> checkEmailVerified() async {
+    return emailVerified;
+  }
+
+  @override
+  Future<void> sendVerificationEmail() async {
+    verificationEmailSent = true;
   }
 
   @override
@@ -71,6 +83,63 @@ void main() {
     expect(auth.email, 'test@email.com');
     expect(auth.password, ' password ');
   });
+
+  testWidgets('goes to splash when email is verified', (tester) async {
+    final auth = FakeAuthService()..emailVerified = true;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LoginPage(auth: auth),
+        routes: {'/splash': (_) => const Scaffold(body: Text('Splash'))},
+      ),
+    );
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'test@email.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'password',
+    );
+
+    await tester.tap(find.text('Log In'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Splash'), findsOneWidget);
+    expect(auth.verificationEmailSent, isFalse);
+  });
+
+  testWidgets(
+    'goes to verify page and sends email when email is not verified',
+    (tester) async {
+      final auth = FakeAuthService()..emailVerified = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LoginPage(auth: auth),
+          routes: {
+            '/verify': (_) => const Scaffold(body: Text('Verify Email')),
+          },
+        ),
+      );
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Email'),
+        'test@email.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Password'),
+        'password',
+      );
+
+      await tester.tap(find.text('Log In'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Verify Email'), findsOneWidget);
+      expect(auth.verificationEmailSent, isTrue);
+    },
+  );
 
   testWidgets('shows friendly error for invalid credentials', (tester) async {
     final auth = FakeAuthService()

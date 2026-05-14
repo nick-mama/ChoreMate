@@ -12,6 +12,10 @@ abstract class AuthRepository {
     String? phone,
   });
 
+  Future<void> sendVerificationEmail();
+
+  Future<bool> checkEmailVerified();
+
   Future<void> sendPasswordResetEmail(String email);
 
   Future<void> logout();

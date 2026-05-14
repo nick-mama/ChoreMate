@@ -21,6 +21,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
   String _householdId = '';
   String _householdName = '';
   String _householdType = 'roommates';
+  // ignore: unused_field
   String _currentRole = 'member';
   String _startOfWeek = 'sunday';
   bool _loading = true;

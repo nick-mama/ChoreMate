@@ -39,7 +39,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future _login() async {
     FocusScope.of(context).unfocus();
 
     setState(() {
@@ -49,8 +49,33 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       await _auth.login(emailController.text.trim(), passwordController.text);
+
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, AppRouter.splash);
+
+      final verified = await _auth.checkEmailVerified();
+
+      if (!mounted) return;
+
+      if (!verified) {
+        await _auth.sendVerificationEmail();
+
+        if (!mounted) return;
+
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRouter.verify,
+          (route) => false,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRouter.splash,
+        (route) => false,
+      );
     } on FirebaseAuthException catch (e) {
       setState(() {
         showError = true;
