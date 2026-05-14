@@ -20,6 +20,8 @@ class _HouseholdPageState extends State<HouseholdPage> {
 
   String _householdId = '';
   String _householdName = '';
+  String _householdType = 'roommates';
+  String _currentRole = 'member';
   String _startOfWeek = 'sunday';
   bool _loading = true;
   bool overdueExpanded = true;
@@ -75,6 +77,19 @@ class _HouseholdPageState extends State<HouseholdPage> {
     }
 
     final householdName = (householdData['name'] as String?) ?? '';
+    final householdType =
+        (householdData['householdType'] as String?) ?? 'roommates';
+
+    String currentRole = 'member';
+    final roles = householdData['memberRoles'];
+
+    if (roles is Map && roles[user.uid] is String) {
+      currentRole = roles[user.uid] as String;
+    } else if (householdData['ownerId'] == user.uid ||
+        householdData['createdBy'] == user.uid) {
+      currentRole = 'owner';
+    }
+
     final loadedHousemates = await _loadHousemates(householdData);
     final loadedActivities = await _loadActivities(householdId);
 
@@ -82,6 +97,8 @@ class _HouseholdPageState extends State<HouseholdPage> {
     setState(() {
       _householdId = householdId;
       _householdName = householdName;
+      _householdType = householdType;
+      _currentRole = currentRole;
       _startOfWeek = startOfWeek;
       housemates = loadedHousemates;
       overdueActivities = loadedActivities.overdue;
@@ -99,6 +116,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
         ? rawMembers.whereType<String>().toList()
         : <String>[];
 
+    final roles = householdData['memberRoles'];
     final loaded = <Housemate>[];
 
     for (final uid in memberUids) {
@@ -114,6 +132,11 @@ class _HouseholdPageState extends State<HouseholdPage> {
       final lastName = (data['lastName'] as String?) ?? '';
       final username = (data['username'] as String?) ?? '';
       final photoUrl = (data['photoUrl'] as String?) ?? '';
+      final role = roles is Map && roles[uid] is String
+          ? roles[uid] as String
+          : householdData['ownerId'] == uid || householdData['createdBy'] == uid
+          ? 'owner'
+          : 'member';
 
       loaded.add(
         Housemate(
@@ -122,6 +145,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
           lastName: lastName,
           username: username,
           photoUrl: photoUrl,
+          role: role,
         ),
       );
     }
@@ -217,6 +241,10 @@ class _HouseholdPageState extends State<HouseholdPage> {
     );
   }
 
+  String _householdTypeLabel() {
+    return _householdType == 'family' ? 'Family' : 'Roommates';
+  }
+
   static DateTime? _readDate(dynamic value) {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
@@ -289,6 +317,14 @@ class _HouseholdPageState extends State<HouseholdPage> {
                           color: AppColors.muted,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _householdTypeLabel(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.muted,
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 14),
                     Container(
@@ -300,7 +336,7 @@ class _HouseholdPageState extends State<HouseholdPage> {
                       child: ScrollConfiguration(
                         behavior: const _WebFriendlyScrollBehavior(),
                         child: SizedBox(
-                          height: 160,
+                          height: 176,
                           child: Scrollbar(
                             controller: _housematesScrollController,
                             thumbVisibility: true,
@@ -840,6 +876,10 @@ class _HousemateCard extends StatelessWidget {
                 '@${housemate.username}',
                 style: const TextStyle(fontSize: 13, color: AppColors.muted),
               ),
+            Text(
+              housemate.roleLabel,
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
           ],
         ),
       ),
@@ -1033,6 +1073,14 @@ class _HousemateProfileSection extends StatelessWidget {
                         color: AppColors.muted,
                       ),
                     ),
+                  const SizedBox(height: 4),
+                  Text(
+                    housemate.roleLabel,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1504,6 +1552,7 @@ class Housemate {
   final String lastName;
   final String username;
   final String photoUrl;
+  final String role;
 
   const Housemate({
     required this.uid,
@@ -1511,7 +1560,23 @@ class Housemate {
     this.lastName = '',
     this.username = '',
     this.photoUrl = '',
+    this.role = 'member',
   });
+
+  String get roleLabel {
+    switch (role) {
+      case 'parent':
+        return 'Parent';
+      case 'child':
+        return 'Child';
+      case 'owner':
+        return 'Owner';
+      case 'admin':
+        return 'Admin';
+      default:
+        return 'Member';
+    }
+  }
 
   String get fullName => '$firstName $lastName'.trim();
 }

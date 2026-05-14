@@ -24,15 +24,21 @@ class HouseholdService {
     return List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  Future<String> createHousehold(String name) async {
+  Future<String> createHousehold(
+    String name, {
+    required String householdType,
+  }) async {
     final inviteCode = _generateInviteCode();
 
     final doc = await _db.collection('households').add({
       'name': name,
       'inviteCode': inviteCode,
+      'householdType': householdType,
+      'ownerId': _uid,
       'createdBy': _uid,
       'createdAt': FieldValue.serverTimestamp(),
       'members': [_uid],
+      'memberRoles': {_uid: 'owner'},
     });
 
     await _db.collection('users').doc(_uid).update({'householdId': doc.id});
@@ -62,6 +68,7 @@ class HouseholdService {
 
     await householdDoc.reference.update({
       'members': FieldValue.arrayUnion([_uid]),
+      'memberRoles.$_uid': 'member',
     });
 
     await _db.collection('users').doc(_uid).update({
@@ -99,6 +106,7 @@ class HouseholdService {
 
     await _db.collection('households').doc(householdId).update({
       'members': FieldValue.arrayUnion([invitedUid]),
+      'memberRoles.$invitedUid': 'member',
     });
 
     await _db.collection('users').doc(invitedUid).update({
@@ -120,5 +128,21 @@ class HouseholdService {
   Future<Map<String, dynamic>?> getHousehold(String householdId) async {
     final doc = await _db.collection('households').doc(householdId).get();
     return doc.data();
+  }
+
+  Future<String> getCurrentUserRole(String householdId) async {
+    final doc = await _db.collection('households').doc(householdId).get();
+    final data = doc.data();
+
+    final roles = data?['memberRoles'];
+    if (roles is Map && roles[_uid] is String) {
+      return roles[_uid] as String;
+    }
+
+    if (data?['ownerId'] == _uid || data?['createdBy'] == _uid) {
+      return 'owner';
+    }
+
+    return 'member';
   }
 }

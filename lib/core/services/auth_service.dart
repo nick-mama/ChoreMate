@@ -65,6 +65,7 @@ class AuthService implements AuthRepository {
       'username': username,
       'email': email,
       'phone': phone ?? '',
+      'householdId': '',
       'createdAt': FieldValue.serverTimestamp(),
     });
 

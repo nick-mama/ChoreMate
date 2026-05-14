@@ -26,10 +26,10 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
   String errorMessage = '';
   bool showError = false;
   int selectedTab = 0;
+  String selectedHouseholdType = 'roommates';
 
   String get _currentUsername {
     final user = FirebaseAuth.instance.currentUser;
-    // prefer displayName; if none, use email
     return user?.displayName ?? user?.email ?? 'Unknown';
   }
 
@@ -56,7 +56,10 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
     });
 
     try {
-      await _service.createHousehold(nameController.text.trim());
+      await _service.createHousehold(
+        nameController.text.trim(),
+        householdType: selectedHouseholdType,
+      );
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppRouter.shell);
     } catch (e) {
@@ -162,13 +165,10 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 20),
-
                     const Center(
                       child: AppLogo(type: LogoType.wordmark, width: 220),
                     ),
-
                     const SizedBox(height: 40),
-
                     const Text(
                       'Set up your household',
                       style: TextStyle(
@@ -177,16 +177,12 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         color: AppColors.text,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     const Text(
                       'Create a new household or join an existing one.',
                       style: TextStyle(fontSize: 16, color: AppColors.muted),
                     ),
-
                     const SizedBox(height: 28),
-
                     Row(
                       children: [
                         _TabButton(
@@ -217,15 +213,46 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 24),
-
                     if (selectedTab == 0) ...[
                       TextField(
                         controller: nameController,
                         decoration: const InputDecoration(
                           hintText: 'Household name',
                         ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Household type',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.text,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _HouseholdTypeButton(
+                              label: 'Roommates',
+                              selected: selectedHouseholdType == 'roommates',
+                              onTap: () => setState(
+                                () => selectedHouseholdType = 'roommates',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _HouseholdTypeButton(
+                              label: 'Family',
+                              selected: selectedHouseholdType == 'family',
+                              onTap: () => setState(
+                                () => selectedHouseholdType = 'family',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
                       if (showError)
@@ -245,7 +272,6 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         onPressed: loading ? null : _createHousehold,
                       ),
                     ],
-
                     if (selectedTab == 1) ...[
                       TextField(
                         controller: codeController,
@@ -272,7 +298,6 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         onPressed: loading ? null : _joinByCode,
                       ),
                     ],
-
                     if (selectedTab == 2) ...[
                       const Text(
                         'Enter the email address of someone you want to add to your household. They must already have a ChoreMate account.',
@@ -308,7 +333,6 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                         onPressed: loading ? null : _joinByEmail,
                       ),
                     ],
-
                     const SizedBox(height: 36),
                     RichText(
                       textAlign: TextAlign.center,
@@ -328,7 +352,7 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
                                 'Sign out',
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: AppColors.blue, // brand link blue
+                                  color: AppColors.blue,
                                   decorationColor: AppColors.blue,
                                 ),
                               ),
@@ -376,6 +400,42 @@ class _TabButton extends StatelessWidget {
             fontSize: 14,
             fontWeight: FontWeight.w600,
             color: selected ? Colors.white : AppColors.muted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HouseholdTypeButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _HouseholdTypeButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.blue : AppColors.field,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : AppColors.text,
+            ),
           ),
         ),
       ),

@@ -23,8 +23,25 @@ class _ChoresPageState extends State<ChoresPage> {
   bool _loadingHousehold = true;
 
   String _householdId = '';
+  String _householdType = 'roommates';
+  String _currentRole = 'member';
   String _startOfWeek = 'sunday';
   List<HouseholdMember> roommates = [];
+
+  bool get _isAdmin => _currentRole == 'owner' || _currentRole == 'admin';
+  bool get _isRoommates => _householdType == 'roommates';
+  bool get _canCreateChores => _isRoommates || _isAdmin;
+
+  bool _canEditChore(ChoreItem chore) {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    if (_isAdmin) return true;
+    return _isRoommates && chore.createdBy == user.uid;
+  }
+
+  bool _canDeleteChore(ChoreItem chore) {
+    return _canEditChore(chore);
+  }
 
   @override
   void initState() {
@@ -42,6 +59,27 @@ class _ChoresPageState extends State<ChoresPage> {
 
     final householdId = userData['householdId'] ?? '';
     final startOfWeek = userData['startOfWeek'] ?? 'sunday';
+
+    String householdType = 'roommates';
+    String currentRole = 'member';
+
+    if (householdId.toString().isNotEmpty) {
+      final householdDoc = await _db
+          .collection('households')
+          .doc(householdId)
+          .get();
+      final householdData = householdDoc.data() ?? {};
+
+      householdType = householdData['householdType'] ?? 'roommates';
+
+      final roles = householdData['memberRoles'];
+      if (roles is Map && roles[user.uid] is String) {
+        currentRole = roles[user.uid] as String;
+      } else if (householdData['ownerId'] == user.uid ||
+          householdData['createdBy'] == user.uid) {
+        currentRole = 'owner';
+      }
+    }
 
     final usersSnapshot = await _db
         .collection('users')
@@ -73,6 +111,8 @@ class _ChoresPageState extends State<ChoresPage> {
 
     setState(() {
       _householdId = householdId;
+      _householdType = householdType;
+      _currentRole = currentRole;
       _startOfWeek = startOfWeek;
       roommates = loadedRoommates;
       _loadingHousehold = false;
@@ -89,7 +129,7 @@ class _ChoresPageState extends State<ChoresPage> {
     return _db
         .collection('chores')
         .where('householdId', isEqualTo: _householdId)
-        .where('assignedTo', isEqualTo: user.uid) // ✅ filter by current user
+        .where('assignedTo', isEqualTo: user.uid)
         .snapshots()
         .map((snapshot) {
           final chores = snapshot.docs.map((doc) {
@@ -119,6 +159,12 @@ class _ChoresPageState extends State<ChoresPage> {
     required HouseholdMember? roommate,
     required bool recurring,
   }) async {
+    if (!_canCreateChores) {
+      throw Exception('You do not have permission to create chores.');
+    }
+
+    final user = _auth.currentUser;
+
     final docRef = await _db.collection('chores').add({
       'householdId': _householdId,
       'name': name,
@@ -130,11 +176,12 @@ class _ChoresPageState extends State<ChoresPage> {
       'recurring': recurring,
       'completed': false,
       'completedAt': null,
+      'createdBy': user?.uid ?? '',
+      'createdByName': user?.displayName ?? user?.email ?? '',
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
 
-    // create notification if assigned to someone
     if (roommate != null) {
       await NotificationService.instance.createNewChoreAssignedNotification(
         householdId: _householdId,
@@ -155,6 +202,10 @@ class _ChoresPageState extends State<ChoresPage> {
     required HouseholdMember? roommate,
     required bool recurring,
   }) async {
+    if (!_canEditChore(chore)) {
+      throw Exception('You do not have permission to edit this chore.');
+    }
+
     await _db.collection('chores').doc(chore.id).update({
       'name': name,
       'description': description,
@@ -184,6 +235,10 @@ class _ChoresPageState extends State<ChoresPage> {
   }
 
   Future<void> _deleteChore(ChoreItem chore) async {
+    if (!_canDeleteChore(chore)) {
+      throw Exception('You do not have permission to delete this chore.');
+    }
+
     await _db.collection('chores').doc(chore.id).delete();
   }
 
@@ -199,14 +254,18 @@ class _ChoresPageState extends State<ChoresPage> {
             Navigator.pop(context);
             await _completeTodo(chore);
           },
-          onDelete: () {
-            Navigator.pop(context);
-            _confirmDelete(chore.name, () => _deleteChore(chore));
-          },
-          onEdit: () {
-            Navigator.pop(context);
-            _showEditChoreDialog(chore);
-          },
+          onDelete: _canDeleteChore(chore)
+              ? () {
+                  Navigator.pop(context);
+                  _confirmDelete(chore.name, () => _deleteChore(chore));
+                }
+              : null,
+          onEdit: _canEditChore(chore)
+              ? () {
+                  Navigator.pop(context);
+                  _showEditChoreDialog(chore);
+                }
+              : null,
         );
       },
     );
@@ -224,20 +283,26 @@ class _ChoresPageState extends State<ChoresPage> {
             Navigator.pop(context);
             await _undoCompleted(chore);
           },
-          onDelete: () {
-            Navigator.pop(context);
-            _confirmDelete(chore.name, () => _deleteChore(chore));
-          },
-          onEdit: () {
-            Navigator.pop(context);
-            _showEditChoreDialog(chore);
-          },
+          onDelete: _canDeleteChore(chore)
+              ? () {
+                  Navigator.pop(context);
+                  _confirmDelete(chore.name, () => _deleteChore(chore));
+                }
+              : null,
+          onEdit: _canEditChore(chore)
+              ? () {
+                  Navigator.pop(context);
+                  _showEditChoreDialog(chore);
+                }
+              : null,
         );
       },
     );
   }
 
   void _showAddChoreDialog(BuildContext context) {
+    if (!_canCreateChores) return;
+
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
     final deadlineController = TextEditingController();
@@ -360,6 +425,8 @@ class _ChoresPageState extends State<ChoresPage> {
   }
 
   void _showEditChoreDialog(ChoreItem chore) {
+    if (!_canEditChore(chore)) return;
+
     final nameController = TextEditingController(text: chore.name);
     final descriptionController = TextEditingController(
       text: chore.description,
@@ -609,13 +676,15 @@ class _ChoresPageState extends State<ChoresPage> {
 
         return Scaffold(
           backgroundColor: AppColors.background,
-          floatingActionButton: FloatingActionButton(
-            backgroundColor: AppColors.tan,
-            foregroundColor: Colors.white,
-            elevation: 2,
-            onPressed: () => _showAddChoreDialog(context),
-            child: const Icon(Icons.add),
-          ),
+          floatingActionButton: _canCreateChores
+              ? FloatingActionButton(
+                  backgroundColor: AppColors.tan,
+                  foregroundColor: Colors.white,
+                  elevation: 2,
+                  onPressed: () => _showAddChoreDialog(context),
+                  child: const Icon(Icons.add),
+                )
+              : null,
           body: SafeArea(
             child: Column(
               children: [
@@ -945,8 +1014,8 @@ class _EmptyStateText extends StatelessWidget {
 class _ChoreOverlay extends StatelessWidget {
   final ChoreItem chore;
   final VoidCallback onComplete;
-  final VoidCallback onDelete;
-  final VoidCallback onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
 
   const _ChoreOverlay({
     required this.chore,
@@ -985,14 +1054,16 @@ class _ChoreOverlay extends StatelessWidget {
                   onPressed: onComplete,
                   icon: const Icon(Icons.check, color: Colors.white),
                 ),
-                IconButton(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit, color: Colors.white),
-                ),
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete, color: Colors.white),
-                ),
+                if (onEdit != null)
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit, color: Colors.white),
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete, color: Colors.white),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1012,8 +1083,8 @@ class _ChoreOverlay extends StatelessWidget {
 class _CompletedChoreOverlay extends StatelessWidget {
   final ChoreItem chore;
   final VoidCallback onUndo;
-  final VoidCallback onDelete;
-  final VoidCallback onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
 
   const _CompletedChoreOverlay({
     required this.chore,
@@ -1052,14 +1123,16 @@ class _CompletedChoreOverlay extends StatelessWidget {
                   onPressed: onUndo,
                   icon: const Icon(Icons.undo, color: AppColors.text),
                 ),
-                IconButton(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit, color: AppColors.text),
-                ),
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete, color: AppColors.text),
-                ),
+                if (onEdit != null)
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit, color: AppColors.text),
+                  ),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete, color: AppColors.text),
+                  ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1120,6 +1193,7 @@ class ChoreItem {
   final bool recurring;
   final bool completed;
   final DateTime? completedAt;
+  final String createdBy;
 
   ChoreItem({
     required this.id,
@@ -1132,6 +1206,7 @@ class ChoreItem {
     required this.recurring,
     required this.completed,
     required this.completedAt,
+    required this.createdBy,
   });
 
   factory ChoreItem.fromFirestore(String id, Map<String, dynamic> data) {
@@ -1146,6 +1221,7 @@ class ChoreItem {
       recurring: data['recurring'] == true,
       completed: data['completed'] == true,
       completedAt: _readDate(data['completedAt']),
+      createdBy: data['createdBy'] ?? '',
     );
   }
 

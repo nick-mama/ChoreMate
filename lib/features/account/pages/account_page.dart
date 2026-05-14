@@ -28,6 +28,7 @@ class _AccountPageState extends State<AccountPage> {
   String _username = '';
   String _householdName = '';
   String _photoUrl = '';
+  String _role = 'member';
 
   int _housemates = 0;
   int _choresDone = 0;
@@ -39,6 +40,21 @@ class _AccountPageState extends State<AccountPage> {
   List<double> individualValues = [0, 0, 0, 0];
   List<double> householdValues = [0, 0, 0, 0];
   List<String> weekLabels = ['', '', '', ''];
+
+  String get _roleLabel {
+    switch (_role) {
+      case 'parent':
+        return 'Parent';
+      case 'child':
+        return 'Child';
+      case 'owner':
+        return 'Owner';
+      case 'admin':
+        return 'Admin';
+      default:
+        return 'Member';
+    }
+  }
 
   @override
   void initState() {
@@ -72,6 +88,7 @@ class _AccountPageState extends State<AccountPage> {
     final photoUrl = data['photoUrl'] ?? '';
 
     String householdName = '';
+    String role = 'member';
 
     if (householdId.isNotEmpty) {
       final householdDoc = await FirebaseFirestore.instance
@@ -79,7 +96,16 @@ class _AccountPageState extends State<AccountPage> {
           .doc(householdId)
           .get(const GetOptions(source: Source.server));
 
-      householdName = householdDoc.data()?['name'] ?? '';
+      final householdData = householdDoc.data() ?? {};
+      householdName = householdData['name'] ?? '';
+
+      final roles = householdData['memberRoles'];
+      if (roles is Map && roles[user.uid] is String) {
+        role = roles[user.uid] as String;
+      } else if (householdData['ownerId'] == user.uid ||
+          householdData['createdBy'] == user.uid) {
+        role = 'owner';
+      }
     }
 
     final accountData = await _loadAccountData(
@@ -94,6 +120,7 @@ class _AccountPageState extends State<AccountPage> {
       _username = username;
       _householdName = householdName;
       _photoUrl = photoUrl;
+      _role = role;
 
       individualValues = accountData.individualValues;
       householdValues = accountData.householdValues;
@@ -339,13 +366,14 @@ class _AccountPageState extends State<AccountPage> {
                     _ProfileSection(
                       displayName: _displayName,
                       username: _username,
+                      role: _roleLabel,
                       householdName: _householdName,
                       photoUrl: _photoUrl,
                       onSettings: _openSettings,
                       onShare: _shareChoreMate,
                       onSignOut: _signOut,
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 30),
                     const Text(
                       'Chores Completed',
                       style: TextStyle(
@@ -387,7 +415,7 @@ class _AccountPageState extends State<AccountPage> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 22),
                     const Text(
                       'Account Stats',
                       style: TextStyle(
@@ -527,6 +555,7 @@ class _AccountHeader extends StatelessWidget {
 class _ProfileSection extends StatelessWidget {
   final String displayName;
   final String username;
+  final String role;
   final String householdName;
   final String photoUrl;
   final VoidCallback onSettings;
@@ -536,6 +565,7 @@ class _ProfileSection extends StatelessWidget {
   const _ProfileSection({
     required this.displayName,
     required this.username,
+    required this.role,
     required this.householdName,
     required this.photoUrl,
     required this.onSettings,
@@ -545,6 +575,9 @@ class _ProfileSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nameText = displayName.isNotEmpty ? displayName : 'Name';
+    final usernameText = username.isNotEmpty ? '@$username' : 'Username';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -561,7 +594,7 @@ class _ProfileSection extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      displayName.isNotEmpty ? displayName : 'Name',
+                      nameText,
                       maxLines: 1,
                       style: const TextStyle(
                         fontSize: 28,
@@ -571,14 +604,17 @@ class _ProfileSection extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    username.isNotEmpty ? '@$username' : 'Username',
-                    style: const TextStyle(fontSize: 16, color: AppColors.text),
+                    usernameText,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: AppColors.muted,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    householdName,
+                    householdName.isNotEmpty ? '$role • $householdName' : role,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       color: AppColors.muted,
                     ),
                   ),
