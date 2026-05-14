@@ -370,7 +370,7 @@ class _ChoresPageState extends State<ChoresPage> {
 
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
-    final deadlineController = TextEditingController();
+    DateTime? selectedDueDate;
     final timeController = TextEditingController();
 
     HouseholdMember? selectedRoommate;
@@ -406,10 +406,35 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: deadlineController,
-                        decoration: const InputDecoration(
-                          hintText: 'Deadline (ex: 3/23/2026)',
+                      InkWell(
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDueDate ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2100),
+                          );
+
+                          if (pickedDate == null) return;
+
+                          setDialogState(() {
+                            selectedDueDate = pickedDate;
+                          });
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            hintText: 'Deadline',
+                          ),
+                          child: Text(
+                            selectedDueDate == null
+                                ? 'Select deadline'
+                                : '${selectedDueDate!.month}/${selectedDueDate!.day}/${selectedDueDate!.year}',
+                            style: TextStyle(
+                              color: selectedDueDate == null
+                                  ? AppColors.muted
+                                  : AppColors.text,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -500,7 +525,7 @@ class _ChoresPageState extends State<ChoresPage> {
                       description: descriptionController.text.trim().isEmpty
                           ? 'No description added.'
                           : descriptionController.text.trim(),
-                      dueDate: _parseDate(deadlineController.text.trim()),
+                      dueDate: selectedDueDate,
                       estimatedTime: timeController.text.trim().isEmpty
                           ? 'Not set'
                           : timeController.text.trim(),
@@ -529,7 +554,7 @@ class _ChoresPageState extends State<ChoresPage> {
     final descriptionController = TextEditingController(
       text: chore.description,
     );
-    final deadlineController = TextEditingController(text: chore.deadline);
+    DateTime? selectedDueDate = chore.dueDate;
     final timeController = TextEditingController(text: chore.estimatedTime);
 
     HouseholdMember? selectedRoommate = roommates
@@ -568,10 +593,35 @@ class _ChoresPageState extends State<ChoresPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: deadlineController,
-                        decoration: const InputDecoration(
-                          hintText: 'Deadline (ex: 3/23/2026)',
+                      InkWell(
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDueDate ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2100),
+                          );
+
+                          if (pickedDate == null) return;
+
+                          setDialogState(() {
+                            selectedDueDate = pickedDate;
+                          });
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            hintText: 'Deadline',
+                          ),
+                          child: Text(
+                            selectedDueDate == null
+                                ? 'Select deadline'
+                                : '${selectedDueDate!.month}/${selectedDueDate!.day}/${selectedDueDate!.year}',
+                            style: TextStyle(
+                              color: selectedDueDate == null
+                                  ? AppColors.muted
+                                  : AppColors.text,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -663,7 +713,7 @@ class _ChoresPageState extends State<ChoresPage> {
                       description: descriptionController.text.trim().isEmpty
                           ? 'No description added.'
                           : descriptionController.text.trim(),
-                      dueDate: _parseDate(deadlineController.text.trim()),
+                      dueDate: selectedDueDate,
                       estimatedTime: timeController.text.trim().isEmpty
                           ? 'Not set'
                           : timeController.text.trim(),
@@ -710,21 +760,6 @@ class _ChoresPageState extends State<ChoresPage> {
         ],
       ),
     );
-  }
-
-  DateTime? _parseDate(String value) {
-    if (value.isEmpty) return null;
-
-    final parts = value.split('/');
-    if (parts.length != 3) return null;
-
-    final month = int.tryParse(parts[0]);
-    final day = int.tryParse(parts[1]);
-    final year = int.tryParse(parts[2]);
-
-    if (month == null || day == null || year == null) return null;
-
-    return DateTime(year, month, day);
   }
 
   DateTime _startOfWeekFor(DateTime date, String startOfWeek) {
