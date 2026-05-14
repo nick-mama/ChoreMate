@@ -88,10 +88,11 @@ class _LoginPageState extends State<LoginPage> {
 
   String _friendlyError(String code) {
     switch (code) {
-      case 'user-not-found':
+      case 'account-not-found':
+        return 'There is no account for that username/email.';
       case 'wrong-password':
       case 'invalid-credential':
-        return 'Incorrect email or password.';
+        return 'Incorrect password.';
       case 'too-many-requests':
         return 'Too many attempts. Try again later.';
       default:
@@ -121,7 +122,10 @@ class _LoginPageState extends State<LoginPage> {
 
                     const SizedBox(height: 40),
 
-                    AppTextField(controller: emailController, hint: 'Email'),
+                    AppTextField(
+                      controller: emailController,
+                      hint: 'Username or Email',
+                    ),
 
                     const SizedBox(height: 16),
 

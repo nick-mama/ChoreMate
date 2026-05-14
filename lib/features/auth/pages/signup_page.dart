@@ -53,6 +53,25 @@ class _SignupPageState extends State<SignupPage> {
   Future<void> _signup() async {
     FocusScope.of(context).unfocus();
 
+    final username = usernameController.text.trim().toLowerCase();
+
+    if (username.length < 3) {
+      setState(() {
+        showError = true;
+        errorMessage = 'Username must be at least 3 characters.';
+      });
+      return;
+    }
+
+    if (!RegExp(r'^[a-z0-9_]+$').hasMatch(username)) {
+      setState(() {
+        showError = true;
+        errorMessage =
+            'Username can only use letters, numbers, and underscores.';
+      });
+      return;
+    }
+
     if (passwordController.text != confirmPasswordController.text) {
       setState(() {
         showError = true;
@@ -80,11 +99,11 @@ class _SignupPageState extends State<SignupPage> {
         password: passwordController.text,
         firstName: firstNameController.text.trim(),
         lastName: lastNameController.text.trim(),
-        username: usernameController.text.trim(),
+        username: username,
         phone: phoneController.text.trim(),
       );
       if (!mounted) return;
-      // After signup, verify email → then household setup
+
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRouter.verify,
@@ -108,6 +127,8 @@ class _SignupPageState extends State<SignupPage> {
         return 'Please enter a valid email address.';
       case 'weak-password':
         return 'Password must be at least 6 characters.';
+      case 'username-already-in-use':
+        return 'That username is already taken.';
       default:
         return 'Something went wrong. Please try again.';
     }

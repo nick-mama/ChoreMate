@@ -14,15 +14,51 @@ class AuthService implements AuthRepository {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   @override
-  Future<UserCredential> login(String email, String password) async {
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+  Future<UserCredential> login(String input, String password) async {
+    final normalizedInput = input.trim().toLowerCase();
 
-    await _syncDisplayNameIfMissing();
+    String email = normalizedInput;
 
-    return credential;
+    if (!normalizedInput.contains('@')) {
+      final usernameDoc = await _db
+          .collection('usernames')
+          .doc(normalizedInput)
+          .get();
+
+      if (!usernameDoc.exists) {
+        throw FirebaseAuthException(code: 'account-not-found');
+      }
+
+      final uid = usernameDoc.data()?['uid'];
+
+      if (uid == null) {
+        throw FirebaseAuthException(code: 'account-not-found');
+      }
+
+      final userDoc = await _db.collection('users').doc(uid).get();
+      final userEmail = userDoc.data()?['email'];
+
+      if (userEmail == null) {
+        throw FirebaseAuthException(code: 'account-not-found');
+      }
+
+      email = userEmail;
+    }
+
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      await _syncDisplayNameIfMissing();
+      return credential;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') {
+        throw FirebaseAuthException(code: 'account-not-found');
+      }
+      rethrow;
+    }
   }
 
   Future<void> _syncDisplayNameIfMissing() async {
@@ -50,26 +86,61 @@ class AuthService implements AuthRepository {
     required String username,
     String? phone,
   }) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    final normalizedUsername = username.trim().toLowerCase();
+    final usernameRef = _db.collection('usernames').doc(normalizedUsername);
 
-    await credential.user!.updateDisplayName(username);
+    var usernameReserved = false;
 
-    final uid = credential.user!.uid;
+    try {
+      await _db.runTransaction((transaction) async {
+        final usernameSnapshot = await transaction.get(usernameRef);
 
-    await _db.collection('users').doc(uid).set({
-      'firstName': firstName,
-      'lastName': lastName,
-      'username': username,
-      'email': email,
-      'phone': phone ?? '',
-      'householdId': '',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+        if (usernameSnapshot.exists) {
+          throw FirebaseAuthException(
+            code: 'username-already-in-use',
+            message: 'Username already taken.',
+          );
+        }
 
-    await credential.user!.sendEmailVerification();
+        transaction.set(usernameRef, {
+          'reservedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      usernameReserved = true;
+
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      await credential.user!.updateDisplayName(normalizedUsername);
+
+      final uid = credential.user!.uid;
+
+      await _db.collection('users').doc(uid).set({
+        'firstName': firstName,
+        'lastName': lastName,
+        'username': normalizedUsername,
+        'email': email,
+        'phone': phone ?? '',
+        'householdId': '',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await usernameRef.set({
+        'uid': uid,
+        'reservedAt': FieldValue.serverTimestamp(),
+      });
+
+      await credential.user!.sendEmailVerification();
+    } catch (e) {
+      if (usernameReserved) {
+        await usernameRef.delete();
+      }
+
+      rethrow;
+    }
   }
 
   @override
