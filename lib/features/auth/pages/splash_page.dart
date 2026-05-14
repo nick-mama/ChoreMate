@@ -45,7 +45,15 @@ class _SplashPageState extends State<SplashPage> {
 
     await user.reload();
     if (!mounted) return;
-    if (!user.emailVerified) {
+
+    final refreshedUser = FirebaseAuth.instance.currentUser;
+
+    if (refreshedUser == null) {
+      Navigator.pushReplacementNamed(context, AppRouter.login);
+      return;
+    }
+
+    if (!refreshedUser.emailVerified) {
       Navigator.pushReplacementNamed(context, AppRouter.verify);
       return;
     }
@@ -53,11 +61,9 @@ class _SplashPageState extends State<SplashPage> {
     final householdId = await HouseholdService().getCurrentHouseholdId();
     if (!mounted) return;
 
-    if (householdId == null) {
-      // No household yet → setup
+    if (householdId == null || householdId.isEmpty) {
       Navigator.pushReplacementNamed(context, AppRouter.householdSetup);
     } else {
-      // Everything good → shell
       Navigator.pushReplacementNamed(context, AppRouter.shell);
     }
   }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/router.dart';
 import '../../../app/theme/app_colors.dart';
@@ -10,6 +11,7 @@ import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/app_logo.dart';
 import 'account_settings_page.dart';
 import '../../../shared/widgets/notification_bell.dart';
+import '../../../core/services/household_service.dart';
 
 class AccountPage extends StatefulWidget {
   const AccountPage({super.key});
@@ -334,6 +336,51 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
+  Future<void> _showInviteCodeDialog() async {
+    final inviteCode = await HouseholdService().getCurrentInviteCode();
+
+    if (!mounted) return;
+
+    if (inviteCode == null || inviteCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No household invite code found.')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Invite Code'),
+        content: SelectableText(
+          inviteCode,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: inviteCode));
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Invite code copied.')),
+              );
+            },
+            child: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -371,6 +418,7 @@ class _AccountPageState extends State<AccountPage> {
                       photoUrl: _photoUrl,
                       onSettings: _openSettings,
                       onShare: _shareChoreMate,
+                      onInvite: _showInviteCodeDialog,
                       onSignOut: _signOut,
                     ),
                     const SizedBox(height: 30),
@@ -560,6 +608,7 @@ class _ProfileSection extends StatelessWidget {
   final String photoUrl;
   final VoidCallback onSettings;
   final VoidCallback onShare;
+  final VoidCallback onInvite;
   final VoidCallback onSignOut;
 
   const _ProfileSection({
@@ -570,6 +619,7 @@ class _ProfileSection extends StatelessWidget {
     required this.photoUrl,
     required this.onSettings,
     required this.onShare,
+    required this.onInvite,
     required this.onSignOut,
   });
 
@@ -638,7 +688,7 @@ class _ProfileSection extends StatelessWidget {
               child: _ActionButton(
                 icon: Icons.ios_share_outlined,
                 label: 'Invite',
-                onTap: onShare,
+                onTap: onInvite,
               ),
             ),
             const SizedBox(width: 10),

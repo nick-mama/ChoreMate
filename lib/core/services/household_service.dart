@@ -24,7 +24,7 @@ class HouseholdService {
     return List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join();
   }
 
-  Future<String> createHousehold(
+  Future<Map<String, String>> createHousehold(
     String name, {
     required String householdType,
   }) async {
@@ -43,7 +43,7 @@ class HouseholdService {
 
     await _db.collection('users').doc(_uid).update({'householdId': doc.id});
 
-    return doc.id;
+    return {'householdId': doc.id, 'inviteCode': inviteCode};
   }
 
   Future<void> joinByCode(String code) async {
@@ -144,5 +144,18 @@ class HouseholdService {
     }
 
     return 'member';
+  }
+
+  Future<String?> getCurrentInviteCode() async {
+    final householdId = await getCurrentHouseholdId();
+
+    if (householdId == null || householdId.isEmpty) {
+      return null;
+    }
+
+    final doc = await _db.collection('households').doc(householdId).get();
+    final data = doc.data();
+
+    return data?['inviteCode'] as String?;
   }
 }

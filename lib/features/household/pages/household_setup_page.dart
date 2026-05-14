@@ -56,10 +56,31 @@ class _HouseholdSetupPageState extends State<HouseholdSetupPage> {
     });
 
     try {
-      await _service.createHousehold(
+      final result = await _service.createHousehold(
         nameController.text.trim(),
         householdType: selectedHouseholdType,
       );
+
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Household created'),
+          content: Text(
+            'Your invite code is:\n\n${result['inviteCode']}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, AppRouter.shell);
     } catch (e) {
