@@ -158,6 +158,7 @@ class _ChoresPageState extends State<ChoresPage> {
     required String estimatedTime,
     required HouseholdMember? roommate,
     required bool recurring,
+    required int recurringEveryWeeks,
   }) async {
     if (!_canCreateChores) {
       throw Exception('You do not have permission to create chores.');
@@ -174,8 +175,10 @@ class _ChoresPageState extends State<ChoresPage> {
       'assignedTo': roommate?.uid,
       'assignedToName': roommate?.name ?? 'Unassigned',
       'recurring': recurring,
+      'recurringEveryWeeks': recurring ? recurringEveryWeeks : null,
       'completed': false,
       'completedAt': null,
+      'lastCompletedAt': null,
       'createdBy': user?.uid ?? '',
       'createdByName': user?.displayName ?? user?.email ?? '',
       'createdAt': FieldValue.serverTimestamp(),
@@ -201,6 +204,7 @@ class _ChoresPageState extends State<ChoresPage> {
     required String estimatedTime,
     required HouseholdMember? roommate,
     required bool recurring,
+    required int recurringEveryWeeks,
   }) async {
     if (!_canEditChore(chore)) {
       throw Exception('You do not have permission to edit this chore.');
@@ -214,16 +218,77 @@ class _ChoresPageState extends State<ChoresPage> {
       'assignedTo': roommate?.uid,
       'assignedToName': roommate?.name ?? 'Unassigned',
       'recurring': recurring,
+      'recurringEveryWeeks': recurring ? recurringEveryWeeks : null,
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }
 
   Future<void> _completeTodo(ChoreItem chore) async {
-    await _db.collection('chores').doc(chore.id).update({
+    final choreRef = _db.collection('chores').doc(chore.id);
+
+    if (chore.recurring && chore.dueDate != null) {
+      final nextDueDate = _nextRecurringDueDate(
+        chore.dueDate!,
+        chore.recurringEveryWeeks,
+      );
+
+      final batch = _db.batch();
+
+      batch.update(choreRef, {
+        'completed': true,
+        'completedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final nextChoreRef = _db.collection('chores').doc();
+
+      batch.set(nextChoreRef, {
+        'householdId': _householdId,
+        'name': chore.name,
+        'description': chore.description,
+        'dueDate': Timestamp.fromDate(nextDueDate),
+        'estimatedTime': chore.estimatedTime,
+        'assignedTo': chore.assignedTo,
+        'assignedToName': chore.roommate,
+        'recurring': true,
+        'recurringEveryWeeks': chore.recurringEveryWeeks,
+        'completed': false,
+        'completedAt': null,
+        'createdBy': chore.createdBy,
+        'createdByName': '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+      return;
+    }
+
+    await choreRef.update({
       'completed': true,
       'completedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  DateTime _nextRecurringDueDate(DateTime currentDueDate, int everyWeeks) {
+    final weeks = everyWeeks <= 0 ? 1 : everyWeeks;
+    final interval = Duration(days: weeks * 7);
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    var nextDueDate = DateTime(
+      currentDueDate.year,
+      currentDueDate.month,
+      currentDueDate.day,
+    ).add(interval);
+
+    while (!nextDueDate.isAfter(today)) {
+      nextDueDate = nextDueDate.add(interval);
+    }
+
+    return nextDueDate;
   }
 
   Future<void> _undoCompleted(ChoreItem chore) async {
@@ -310,6 +375,7 @@ class _ChoresPageState extends State<ChoresPage> {
 
     HouseholdMember? selectedRoommate;
     bool recurring = false;
+    int recurringEveryWeeks = 1;
 
     showDialog(
       context: context,
@@ -374,12 +440,43 @@ class _ChoresPageState extends State<ChoresPage> {
                           Checkbox(
                             value: recurring,
                             onChanged: (value) {
-                              setDialogState(() => recurring = value ?? false);
+                              setDialogState(() {
+                                recurring = value ?? false;
+                                if (!recurring) recurringEveryWeeks = 1;
+                              });
                             },
                           ),
                           const Text('Recurring'),
                         ],
                       ),
+                      if (recurring) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Every'),
+                            const SizedBox(width: 12),
+                            DropdownButton<int>(
+                              value: recurringEveryWeeks,
+                              items: List.generate(12, (index) => index + 1)
+                                  .map((weeks) {
+                                    return DropdownMenuItem(
+                                      value: weeks,
+                                      child: Text('$weeks'),
+                                    );
+                                  })
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setDialogState(() {
+                                  recurringEveryWeeks = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            Text(recurringEveryWeeks == 1 ? 'week' : 'weeks'),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -409,6 +506,7 @@ class _ChoresPageState extends State<ChoresPage> {
                           : timeController.text.trim(),
                       roommate: selectedRoommate,
                       recurring: recurring,
+                      recurringEveryWeeks: recurringEveryWeeks,
                     );
 
                     if (!context.mounted) return;
@@ -439,6 +537,7 @@ class _ChoresPageState extends State<ChoresPage> {
         .firstOrNull;
 
     bool recurring = chore.recurring;
+    int recurringEveryWeeks = chore.recurringEveryWeeks;
 
     showDialog(
       context: context,
@@ -503,12 +602,43 @@ class _ChoresPageState extends State<ChoresPage> {
                           Checkbox(
                             value: recurring,
                             onChanged: (value) {
-                              setDialogState(() => recurring = value ?? false);
+                              setDialogState(() {
+                                recurring = value ?? false;
+                                if (!recurring) recurringEveryWeeks = 1;
+                              });
                             },
                           ),
                           const Text('Recurring'),
                         ],
                       ),
+                      if (recurring) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Every'),
+                            const SizedBox(width: 12),
+                            DropdownButton<int>(
+                              value: recurringEveryWeeks,
+                              items: List.generate(12, (index) => index + 1)
+                                  .map((weeks) {
+                                    return DropdownMenuItem(
+                                      value: weeks,
+                                      child: Text('$weeks'),
+                                    );
+                                  })
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setDialogState(() {
+                                  recurringEveryWeeks = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            Text(recurringEveryWeeks == 1 ? 'week' : 'weeks'),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -539,6 +669,7 @@ class _ChoresPageState extends State<ChoresPage> {
                           : timeController.text.trim(),
                       roommate: selectedRoommate,
                       recurring: recurring,
+                      recurringEveryWeeks: recurringEveryWeeks,
                     );
 
                     if (!context.mounted) return;
@@ -759,6 +890,7 @@ class _ChoresPageState extends State<ChoresPage> {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _TodoChoreTile(
                                   title: chore.name,
+                                  dueDate: chore.deadline,
                                   onTap: () => _showChoreOverlay(chore),
                                 ),
                               ),
@@ -783,6 +915,7 @@ class _ChoresPageState extends State<ChoresPage> {
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: _TodoChoreTile(
                                   title: chore.name,
+                                  dueDate: chore.deadline,
                                   onTap: () => _showChoreOverlay(chore),
                                 ),
                               ),
@@ -922,9 +1055,14 @@ class _SectionHeader extends StatelessWidget {
 
 class _TodoChoreTile extends StatelessWidget {
   final String title;
+  final String dueDate;
   final VoidCallback onTap;
 
-  const _TodoChoreTile({required this.title, required this.onTap});
+  const _TodoChoreTile({
+    required this.title,
+    required this.dueDate,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -937,13 +1075,27 @@ class _TodoChoreTile extends StatelessWidget {
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Text(
+                dueDate,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1070,7 +1222,7 @@ class _ChoreOverlay extends StatelessWidget {
             _OverlayField('Description:', chore.description),
             _OverlayField('Deadline:', chore.deadline),
             _OverlayField('Estimated Time:', chore.estimatedTime),
-            _OverlayField('Recurring?', chore.recurring ? 'Yes' : 'No'),
+            _OverlayField('Recurring?', chore.recurringText),
             _OverlayField('Roommate:', chore.roommate),
             _OverlayField('Done?', 'No'),
           ],
@@ -1139,11 +1291,7 @@ class _CompletedChoreOverlay extends StatelessWidget {
             _OverlayField('Description:', chore.description, dark: true),
             _OverlayField('Deadline:', chore.deadline, dark: true),
             _OverlayField('Estimated Time:', chore.estimatedTime, dark: true),
-            _OverlayField(
-              'Recurring?',
-              chore.recurring ? 'Yes' : 'No',
-              dark: true,
-            ),
+            _OverlayField('Recurring?', chore.recurringText, dark: true),
             _OverlayField('Roommate:', chore.roommate, dark: true),
             _OverlayField('Completed:', chore.completedAtText, dark: true),
           ],
@@ -1191,6 +1339,7 @@ class ChoreItem {
   final String? assignedTo;
   final String roommate;
   final bool recurring;
+  final int recurringEveryWeeks;
   final bool completed;
   final DateTime? completedAt;
   final String createdBy;
@@ -1204,6 +1353,7 @@ class ChoreItem {
     required this.assignedTo,
     required this.roommate,
     required this.recurring,
+    required this.recurringEveryWeeks,
     required this.completed,
     required this.completedAt,
     required this.createdBy,
@@ -1219,6 +1369,9 @@ class ChoreItem {
       assignedTo: data['assignedTo'],
       roommate: data['assignedToName'] ?? 'Unassigned',
       recurring: data['recurring'] == true,
+      recurringEveryWeeks: _readRecurringEveryWeeks(
+        data['recurringEveryWeeks'],
+      ),
       completed: data['completed'] == true,
       completedAt: _readDate(data['completedAt']),
       createdBy: data['createdBy'] ?? '',
@@ -1228,6 +1381,13 @@ class ChoreItem {
   String get deadline {
     if (dueDate == null) return 'No deadline';
     return '${dueDate!.month}/${dueDate!.day}/${dueDate!.year}';
+  }
+
+  String get recurringText {
+    if (!recurring) return 'No';
+
+    final unit = recurringEveryWeeks == 1 ? 'week' : 'weeks';
+    return 'Every $recurringEveryWeeks $unit';
   }
 
   String get completedAtText {
@@ -1251,6 +1411,12 @@ class ChoreItem {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     return null;
+  }
+
+  static int _readRecurringEveryWeeks(dynamic value) {
+    if (value is int && value > 0) return value;
+    if (value is num && value > 0) return value.toInt();
+    return 1;
   }
 }
 
