@@ -44,7 +44,10 @@ void main() {
           'email': 'user@example.com',
         });
 
-        final result = await service.createHousehold('Apartment');
+        final result = await service.createHousehold(
+          'Apartment',
+          householdType: 'roommates',
+        );
 
         final householdDoc = await db
             .collection('households')
@@ -54,8 +57,11 @@ void main() {
 
         expect(householdDoc.exists, true);
         expect(householdDoc.data()?['name'], 'Apartment');
+        expect(householdDoc.data()?['householdType'], 'roommates');
+        expect(householdDoc.data()?['ownerId'], 'user-1');
         expect(householdDoc.data()?['createdBy'], 'user-1');
         expect(householdDoc.data()?['members'], ['user-1']);
+        expect(householdDoc.data()?['memberRoles'], {'user-1': 'owner'});
         expect(householdDoc.data()?['inviteCode'], isA<String>());
         expect(userDoc.data()?['householdId'], result);
       },
@@ -77,6 +83,7 @@ void main() {
           'name': 'Apartment',
           'inviteCode': 'ABC123',
           'members': ['owner-1'],
+          'memberRoles': {'owner-1': 'owner'},
         });
 
         when(
@@ -96,6 +103,7 @@ void main() {
         final userDoc = await db.collection('users').doc('user-1').get();
 
         expect(householdDoc.data()?['members'], contains('user-1'));
+        expect(householdDoc.data()?['memberRoles']['user-1'], 'member');
         expect(userDoc.data()?['householdId'], 'household-1');
 
         verify(
@@ -125,6 +133,7 @@ void main() {
       await db.collection('households').doc('household-1').set({
         'name': 'Apartment',
         'members': ['user-1'],
+        'memberRoles': {'user-1': 'owner'},
       });
 
       when(
@@ -147,6 +156,7 @@ void main() {
           .get();
 
       expect(householdDoc.data()?['members'], contains('invited-1'));
+      expect(householdDoc.data()?['memberRoles']['invited-1'], 'member');
       expect(invitedUserDoc.data()?['householdId'], 'household-1');
 
       verify(
@@ -193,5 +203,28 @@ void main() {
 
       expect(result?['name'], 'Apartment');
     });
+
+    test('getCurrentUserRole returns role from memberRoles', () async {
+      await db.collection('households').doc('household-1').set({
+        'memberRoles': {'user-1': 'admin'},
+      });
+
+      final result = await service.getCurrentUserRole('household-1');
+
+      expect(result, 'admin');
+    });
+
+    test(
+      'getCurrentUserRole falls back to owner when user created household',
+      () async {
+        await db.collection('households').doc('household-1').set({
+          'createdBy': 'user-1',
+        });
+
+        final result = await service.getCurrentUserRole('household-1');
+
+        expect(result, 'owner');
+      },
+    );
   });
 }
