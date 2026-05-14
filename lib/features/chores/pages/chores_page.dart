@@ -88,15 +88,12 @@ class _ChoresPageState extends State<ChoresPage> {
 
     final loadedRoommates = usersSnapshot.docs.map((doc) {
       final data = doc.data();
-      final firstName = data['firstName'] ?? '';
-      final lastName = data['lastName'] ?? '';
-      final username = data['username'] ?? '';
-
-      final fullName = '$firstName $lastName'.trim();
+      final firstName = (data['firstName'] ?? '').toString().trim();
+      final username = (data['username'] ?? '').toString().trim();
 
       return HouseholdMember(
         uid: doc.id,
-        name: fullName.isNotEmpty ? fullName : username,
+        name: firstName.isNotEmpty ? firstName : username,
       );
     }).toList();
 
